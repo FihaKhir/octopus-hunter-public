@@ -119,6 +119,12 @@
         </select>
       </div>
       <div>
+        <label>Symbol</label>
+        <select id="symbolFilter" onchange="renderAll()">
+          <option value="">All</option>
+        </select>
+      </div>
+      <div>
         <label>Strategy version</label>
         <select id="versionFilter" onchange="renderAll()">
           <option value="">All</option>
@@ -202,6 +208,7 @@ async function loadHistory(){
     allRows = payload.rows;
     showTruncationWarning(payload.truncated);
     populateVersionFilter();
+    populateSymbolFilter();
     renderAll();
     return true;
   }catch(e){
@@ -243,23 +250,31 @@ function withinTimeRange(row){
 
 function filteredRows(){
   const fam = document.getElementById('familyFilter')?.value;
+  const sym = document.getElementById('symbolFilter')?.value;
   const outcome = document.getElementById('outcomeFilter')?.value;
   const version = document.getElementById('versionFilter')?.value;
   return allRows.filter(r =>
     (!fam || r.family === fam) &&
+    (!sym || r.symbol === sym) &&
     (!outcome || r.outcome === outcome) &&
     (!version || versionLabel(r) === version) &&
     withinTimeRange(r)
   );
 }
 
-// Rows scoped by Family/Outcome/Time only — used for the version-comparison
-// table, which needs every version visible side by side regardless of
-// which single version the main table below is filtered to.
+// Rows scoped by Family/Symbol/Outcome/Time only — used for the
+// version-comparison table, which needs every version visible side by side
+// regardless of which single version the main table below is filtered to.
 function familyOutcomeFilteredRows(){
   const fam = document.getElementById('familyFilter')?.value;
+  const sym = document.getElementById('symbolFilter')?.value;
   const outcome = document.getElementById('outcomeFilter')?.value;
-  return allRows.filter(r => (!fam || r.family === fam) && (!outcome || r.outcome === outcome) && withinTimeRange(r));
+  return allRows.filter(r =>
+    (!fam || r.family === fam) &&
+    (!sym || r.symbol === sym) &&
+    (!outcome || r.outcome === outcome) &&
+    withinTimeRange(r)
+  );
 }
 
 // Signals sent before strategy_version tracking was deployed have no value
@@ -277,6 +292,15 @@ function populateVersionFilter(){
   select.innerHTML = '<option value="">All</option>' +
     versions.map(v => `<option value="${v}">${v}</option>`).join('');
   if(versions.includes(current)) select.value = current;
+}
+
+function populateSymbolFilter(){
+  const select = document.getElementById('symbolFilter');
+  const current = select.value;
+  const symbols = [...new Set(allRows.map(r => r.symbol).filter(Boolean))].sort();
+  select.innerHTML = '<option value="">All</option>' +
+    symbols.map(s => `<option value="${s}">${s}</option>`).join('');
+  if(symbols.includes(current)) select.value = current;
 }
 
 function renderVersionCompare(){
