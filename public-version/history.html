@@ -164,6 +164,8 @@ const ADMIN_KEY = 'octopusHunterAdminSecret';
 let adminSecret = localStorage.getItem(ADMIN_KEY);
 let allRows = [];
 let timeRangeHours = null; // null = all time
+let queryWindowFrom = null; // unix seconds — set when a time-range button is active
+let queryWindowTo = null;   // unix seconds — set when a time-range button is active
 
 function unlockAdmin(){
   const val = document.getElementById('adminSecretInput').value.trim();
@@ -199,8 +201,13 @@ async function loadHistory(){
   try{
     let url = '/api/history?admin_secret=' + encodeURIComponent(adminSecret);
     if(timeRangeHours){
-      const since = Math.floor((Date.now() / 1000) - (timeRangeHours * 3600));
-      url += '&since=' + since;
+      const nowSeconds = Math.floor(Date.now() / 1000);
+      queryWindowTo = nowSeconds;
+      queryWindowFrom = nowSeconds - (timeRangeHours * 3600);
+      url += '&since=' + queryWindowFrom;
+    } else {
+      queryWindowFrom = null;
+      queryWindowTo = null;
     }
     const res = await fetch(url);
     if(!res.ok) return false;
@@ -240,12 +247,13 @@ function setTimeRange(hours, btnEl){
 
 // opened_at is unix seconds, as sent by the EA (sent_at). This remains as a
 // client-side safety net, but the real filtering now happens server-side
-// via loadHistory()'s since= param — see api/history.js.
+// via loadHistory()'s since= param — see api/history.js. Uses the same
+// queryWindowFrom stored at fetch time so this never drifts from what was
+// actually requested.
 function withinTimeRange(row){
-  if(!timeRangeHours) return true;
+  if(queryWindowFrom === null) return true;
   if(!row.opened_at) return false;
-  const cutoff = (Date.now() / 1000) - (timeRangeHours * 3600);
-  return row.opened_at >= cutoff;
+  return row.opened_at >= queryWindowFrom;
 }
 
 function filteredRows(){
@@ -323,8 +331,15 @@ function renderVersionCompare(){
     const winRate = resolved > 0 ? ((wins / resolved) * 100).toFixed(1) + '%' : '—';
 
     const openedTimes = vRows.map(r => r.opened_at).filter(Boolean);
-    const from = openedTimes.length ? fmtTime(Math.min(...openedTimes)) : '—';
-    const to = openedTimes.length ? fmtTime(Math.max(...openedTimes)) : '—';
+    // When a time-range button is active, From/To reflect the actual
+    // requested window (e.g. exactly 1h apart) so every version row shows
+    // the same, consistent boundary — not just whenever that version's
+    // first/last signal happened to land within it. In "All time" mode
+    // there's no fixed window, so this falls back to the real observed span.
+    const from = queryWindowFrom !== null ? fmtTime(queryWindowFrom)
+               : (openedTimes.length ? fmtTime(Math.min(...openedTimes)) : '—');
+    const to = queryWindowTo !== null ? fmtTime(queryWindowTo)
+             : (openedTimes.length ? fmtTime(Math.max(...openedTimes)) : '—');
 
     return `
       <tr>
