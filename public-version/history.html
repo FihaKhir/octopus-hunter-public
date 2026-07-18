@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" id="htmlRoot">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Octopus Hunter — Performance</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
   :root{
     --bg:#0a1016; --panel:#121a1f; --border:#1f2f33; --text:#e4e7eb;
@@ -13,6 +13,15 @@
   }
   *{box-sizing:border-box; margin:0; padding:0;}
   body{ background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; padding:24px 16px 60px; }
+  body.lang-ar{ font-family:'Tajawal',sans-serif; }
+  /* The data table stays LTR even in Arabic mode: with this many numeric
+     columns (prices, timestamps, percentages), flipping column order to
+     RTL would make the table harder to read, not easier — this matches
+     how most bilingual trading/finance UIs handle dense data tables.
+     Labels, headers, and surrounding UI still flip normally. */
+  body.lang-ar .table-scroll table{ direction:ltr; text-align:left; }
+  body.lang-ar .table-scroll th, body.lang-ar .table-scroll td{ text-align:left; }
+  body.lang-ar .stats-grid, body.lang-ar .filters{ direction:rtl; }
   .wrap{ max-width:1000px; margin:0 auto; }
   .page-head{ display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:24px; }
   h1{ font-family:'IBM Plex Mono',monospace; font-size:20px; }
@@ -56,49 +65,57 @@
   .empty-note{ color:var(--muted); font-family:'IBM Plex Mono',monospace; font-size:13px; text-align:center; padding:30px 0; }
 </style>
 </head>
-<body>
+<body id="bodyRoot">
 
 <div id="lockScreen">
-  <h1>Performance — Admin Access</h1>
-  <label>Admin password</label>
+  <h1 id="lockTitle" data-i18n="lockTitle">Performance — Admin Access</h1>
+  <label id="lockLabel" data-i18n="lockLabel">Admin password</label>
   <input type="password" id="adminSecretInput" style="width:100%; margin-bottom:14px;" placeholder="Enter admin password">
-  <button onclick="unlockAdmin()" style="width:100%;">Unlock</button>
+  <button onclick="unlockAdmin()" style="width:100%;" id="lockUnlockBtn" data-i18n="lockUnlockBtn">Unlock</button>
   <div class="error" id="lockError"></div>
+  <button class="nav-btn" onclick="toggleLang()" id="langBtnLock" data-i18n="langBtn" style="margin-top:16px;">🌐 العربية</button>
 </div>
 
 <div class="wrap" id="panelWrap" style="display:none;">
   <div class="page-head">
-    <h1>📊 Octopus Hunter — Performance (Public)</h1>
-    <a class="nav-btn" href="/admin.html">⚙️ Admin</a>
+    <h1 id="pageTitle" data-i18n="pageTitle">📊 Octopus Hunter — Performance (Public)</h1>
+    <div style="display:flex; gap:10px;">
+      <button class="nav-btn" onclick="toggleLang()" id="langBtn" data-i18n="langBtn">🌐 العربية</button>
+      <a class="nav-btn" href="/admin.html" id="adminNavBtn" data-i18n="adminNavBtn">⚙️ Admin</a>
+    </div>
   </div>
 
   <div class="stats-grid" id="statsGrid"></div>
 
   <div class="panel">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
-      <span style="font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--muted);">Win / loss curve (cumulative, oldest → newest)</span>
-      <button class="secondary" onclick="loadHistory()">Refresh</button>
+      <span style="font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--muted);" id="chartHeading" data-i18n="chartHeading">Win / loss curve (cumulative, oldest → newest)</span>
+      <button class="secondary" onclick="loadHistory()" id="refreshBtn1" data-i18n="refreshBtn">Refresh</button>
     </div>
     <div id="chartWrap"></div>
   </div>
 
   <div class="panel">
-    <div style="font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--muted); margin-bottom:10px;">Time range</div>
+    <div style="font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--muted); margin-bottom:10px;" id="timeRangeHeading" data-i18n="timeRangeHeading">Time range</div>
     <div class="filters" style="margin-bottom:0;" id="timeRangeButtons">
-      <button class="secondary time-range-btn active" data-hours="" onclick="setTimeRange(null, this)">All time</button>
-      <button class="secondary time-range-btn" data-hours="1" onclick="setTimeRange(1, this)">Last 1h</button>
-      <button class="secondary time-range-btn" data-hours="4" onclick="setTimeRange(4, this)">Last 4h</button>
-      <button class="secondary time-range-btn" data-hours="12" onclick="setTimeRange(12, this)">Last 12h</button>
-      <button class="secondary time-range-btn" data-hours="24" onclick="setTimeRange(24, this)">Last 24h</button>
+      <button class="secondary time-range-btn active" data-hours="" data-i18n="timeAll" onclick="setTimeRange(null, this)">All time</button>
+      <button class="secondary time-range-btn" data-hours="1" data-i18n="time1h" onclick="setTimeRange(1, this)">Last 1h</button>
+      <button class="secondary time-range-btn" data-hours="4" data-i18n="time4h" onclick="setTimeRange(4, this)">Last 4h</button>
+      <button class="secondary time-range-btn" data-hours="12" data-i18n="time12h" onclick="setTimeRange(12, this)">Last 12h</button>
+      <button class="secondary time-range-btn" data-hours="24" data-i18n="time24h" onclick="setTimeRange(24, this)">Last 24h</button>
     </div>
   </div>
 
   <div class="panel">
-    <div style="font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--muted); margin-bottom:14px;">Strategy version comparison (respects Family/Outcome/Time filters, ignores the Strategy version dropdown itself)</div>
+    <div style="font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--muted); margin-bottom:14px;" id="versionCompareHeading" data-i18n="versionCompareHeading">Strategy version comparison (respects Family/Symbol/Outcome/Time filters, ignores the Strategy version dropdown itself)</div>
     <div class="table-scroll">
       <table>
         <thead>
-          <tr><th>Version</th><th>Total</th><th>Wins</th><th>Losses</th><th>Still open</th><th>Invalidated</th><th>Win rate</th><th>From</th><th>To</th></tr>
+          <tr>
+            <th data-i18n="colVersion">Version</th><th data-i18n="colTotal">Total</th><th data-i18n="colWins">Wins</th>
+            <th data-i18n="colLosses">Losses</th><th data-i18n="colStillOpen">Still open</th><th data-i18n="colInvalidated">Invalidated</th>
+            <th data-i18n="colWinRate">Win rate</th><th data-i18n="colFrom">From</th><th data-i18n="colTo">To</th>
+          </tr>
         </thead>
         <tbody id="versionCompareBody"></tbody>
       </table>
@@ -108,9 +125,9 @@
   <div class="panel">
     <div class="filters">
       <div>
-        <label>Family</label>
+        <label data-i18n="filterFamily">Family</label>
         <select id="familyFilter" onchange="renderAll()">
-          <option value="">All</option>
+          <option value="" data-i18n="optionAll">All</option>
           <option value="GainX">GainX</option>
           <option value="PainX">PainX</option>
           <option value="SwitchX">SwitchX</option>
@@ -119,25 +136,25 @@
         </select>
       </div>
       <div>
-        <label>Symbol</label>
+        <label data-i18n="filterSymbol">Symbol</label>
         <select id="symbolFilter" onchange="renderAll()">
-          <option value="">All</option>
+          <option value="" data-i18n="optionAll">All</option>
         </select>
       </div>
       <div>
-        <label>Strategy version</label>
+        <label data-i18n="filterVersion">Strategy version</label>
         <select id="versionFilter" onchange="renderAll()">
-          <option value="">All</option>
+          <option value="" data-i18n="optionAll">All</option>
         </select>
       </div>
       <div>
-        <label>Outcome</label>
+        <label data-i18n="filterOutcome">Outcome</label>
         <select id="outcomeFilter" onchange="renderAll()">
-          <option value="">All</option>
-          <option value="win">Wins</option>
-          <option value="loss">Losses</option>
-          <option value="open">Still open</option>
-          <option value="invalidated">Invalidated</option>
+          <option value="" data-i18n="optionAll">All</option>
+          <option value="win" data-i18n="outcomeWins">Wins</option>
+          <option value="loss" data-i18n="outcomeLosses">Losses</option>
+          <option value="open" data-i18n="outcomeOpen">Still open</option>
+          <option value="invalidated" data-i18n="outcomeInvalidated">Invalidated</option>
         </select>
       </div>
     </div>
@@ -145,14 +162,16 @@
       <table>
         <thead>
           <tr>
-            <th>Symbol</th><th>Family</th><th>Side</th><th>Confidence</th>
-            <th>Entry</th><th>SL</th><th>TP</th><th>Outcome</th>
-            <th>Version</th><th>Opened</th><th>Closed</th>
+            <th data-i18n="detailColSymbol">Symbol</th><th data-i18n="detailColFamily">Family</th>
+            <th data-i18n="detailColSide">Side</th><th data-i18n="detailColConfidence">Confidence</th>
+            <th data-i18n="detailColEntry">Entry</th><th data-i18n="detailColSL">SL</th><th data-i18n="detailColTP">TP</th>
+            <th data-i18n="detailColOutcome">Outcome</th>
+            <th data-i18n="detailColVersion">Version</th><th data-i18n="detailColOpened">Opened</th><th data-i18n="detailColClosed">Closed</th>
           </tr>
         </thead>
         <tbody id="historyTableBody"></tbody>
       </table>
-      <div class="empty-note" id="emptyNote" style="display:none;">No trade history yet — it fills in as signals fire and resolve.</div>
+      <div class="empty-note" id="emptyNote" style="display:none;" data-i18n="noHistoryYet">No trade history yet — it fills in as signals fire and resolve.</div>
     </div>
   </div>
 </div>
@@ -166,6 +185,106 @@ let allRows = [];
 let timeRangeHours = null; // null = all time
 let queryWindowFrom = null; // unix seconds — set when a time-range button is active
 let queryWindowTo = null;   // unix seconds — set when a time-range button is active
+
+// --- i18n ---------------------------------------------------------------
+// Mirrors the exact pattern already used on index.html (I18N dict, t(),
+// toggleLang(), applyStaticText()) for consistency across the two pages.
+// IMPORTANT: only visible label text lives here. Symbol names, strategy-
+// version tags, and the underlying values used for filtering (outcome
+// codes, family codes) are never translated and never touched by this —
+// they're identifiers, not UI copy, exactly like index.html already
+// treats symbol names. This keeps localization purely cosmetic.
+const I18N = {
+  en: {
+    docTitle: 'Octopus Hunter — Performance',
+    lockTitle: 'Performance — Admin Access',
+    lockLabel: 'Admin password',
+    adminPasswordPlaceholder: 'Enter admin password',
+    lockUnlockBtn: 'Unlock',
+    wrongPassword: 'Wrong password.',
+    langBtn: '🌐 العربية',
+    pageTitle: '📊 Octopus Hunter — Performance (Public)',
+    adminNavBtn: '⚙️ Admin',
+    chartHeading: 'Win / loss curve (cumulative, oldest → newest)',
+    refreshBtn: 'Refresh',
+    timeRangeHeading: 'Time range',
+    timeAll: 'All time', time1h: 'Last 1h', time4h: 'Last 4h', time12h: 'Last 12h', time24h: 'Last 24h',
+    versionCompareHeading: 'Strategy version comparison (respects Family/Symbol/Outcome/Time filters, ignores the Strategy version dropdown itself)',
+    colVersion: 'Version', colTotal: 'Total', colWins: 'Wins', colLosses: 'Losses',
+    colStillOpen: 'Still open', colInvalidated: 'Invalidated', colWinRate: 'Win rate',
+    colFrom: 'From', colTo: 'To',
+    filterFamily: 'Family', filterSymbol: 'Symbol', filterVersion: 'Strategy version', filterOutcome: 'Outcome',
+    optionAll: 'All',
+    outcomeWins: 'Wins', outcomeLosses: 'Losses', outcomeOpen: 'Still open', outcomeInvalidated: 'Invalidated',
+    detailColSymbol: 'Symbol', detailColFamily: 'Family', detailColSide: 'Side', detailColConfidence: 'Confidence',
+    detailColEntry: 'Entry', detailColSL: 'SL', detailColTP: 'TP', detailColOutcome: 'Outcome',
+    detailColVersion: 'Version', detailColOpened: 'Opened', detailColClosed: 'Closed',
+    noHistoryYet: 'No trade history yet — it fills in as signals fire and resolve.',
+    statTotalSignals: 'Total signals', statWins: 'Wins', statLosses: 'Losses',
+    statStillOpen: 'Still open', statInvalidated: 'Invalidated', statWinRate: 'Win rate',
+    noResolvedTrades: 'No resolved trades yet.',
+    noDataYet: 'No data yet.',
+    sideBuy: 'BUY', sideSell: 'SELL',
+    badgeWin: 'WIN', badgeLoss: 'LOSS', badgeOpen: 'OPEN', badgeInvalidated: 'INVALIDATED',
+    truncationWarning: 'This range has more data than can be safely loaded at once — numbers below are a partial slice, not the full total. Pick a narrower time range for exact figures.'
+  },
+  ar: {
+    docTitle: 'الأخطبوط الصياد — الأداء',
+    lockTitle: 'الأداء — دخول الإدارة',
+    lockLabel: 'كلمة مرور الإدارة',
+    adminPasswordPlaceholder: 'أدخل كلمة مرور الإدارة',
+    lockUnlockBtn: 'دخول',
+    wrongPassword: 'كلمة المرور غير صحيحة.',
+    langBtn: '🌐 English',
+    pageTitle: '📊 الأخطبوط الصياد — الأداء (عام)',
+    adminNavBtn: '⚙️ الإدارة',
+    chartHeading: 'منحنى الربح/الخسارة (تراكمي، من الأقدم إلى الأحدث)',
+    refreshBtn: 'تحديث',
+    timeRangeHeading: 'النطاق الزمني',
+    timeAll: 'كل الوقت', time1h: 'آخر ساعة', time4h: 'آخر 4 ساعات', time12h: 'آخر 12 ساعة', time24h: 'آخر 24 ساعة',
+    versionCompareHeading: 'مقارنة إصدارات الاستراتيجية (تراعي فلاتر العائلة/الرمز/النتيجة/الوقت، وتتجاهل قائمة إصدار الاستراتيجية نفسها)',
+    colVersion: 'الإصدار', colTotal: 'الإجمالي', colWins: 'الأرباح', colLosses: 'الخسائر',
+    colStillOpen: 'لا تزال مفتوحة', colInvalidated: 'ملغاة', colWinRate: 'معدل الربح',
+    colFrom: 'من', colTo: 'إلى',
+    filterFamily: 'العائلة', filterSymbol: 'الرمز', filterVersion: 'إصدار الاستراتيجية', filterOutcome: 'النتيجة',
+    optionAll: 'الكل',
+    outcomeWins: 'الأرباح', outcomeLosses: 'الخسائر', outcomeOpen: 'لا تزال مفتوحة', outcomeInvalidated: 'ملغاة',
+    detailColSymbol: 'الرمز', detailColFamily: 'العائلة', detailColSide: 'الاتجاه', detailColConfidence: 'مستوى الثقة',
+    detailColEntry: 'الدخول', detailColSL: 'وقف الخسارة', detailColTP: 'جني الأرباح', detailColOutcome: 'النتيجة',
+    detailColVersion: 'الإصدار', detailColOpened: 'وقت الفتح', detailColClosed: 'وقت الإغلاق',
+    noHistoryYet: 'لا يوجد سجل صفقات بعد — سيُملأ تلقائياً مع صدور الإشارات وتحققها.',
+    statTotalSignals: 'إجمالي الإشارات', statWins: 'الأرباح', statLosses: 'الخسائر',
+    statStillOpen: 'لا تزال مفتوحة', statInvalidated: 'ملغاة', statWinRate: 'معدل الربح',
+    noResolvedTrades: 'لا توجد صفقات محسومة بعد.',
+    noDataYet: 'لا توجد بيانات بعد.',
+    sideBuy: 'شراء', sideSell: 'بيع',
+    badgeWin: 'ربح', badgeLoss: 'خسارة', badgeOpen: 'مفتوحة', badgeInvalidated: 'ملغاة',
+    truncationWarning: 'يحتوي هذا النطاق على بيانات أكثر مما يمكن تحميله بأمان دفعة واحدة — الأرقام أدناه جزء من البيانات وليست الإجمالي الكامل. اختر نطاقاً زمنياً أضيق للحصول على أرقام دقيقة.'
+  }
+};
+
+const LANG_STORAGE_KEY = 'octopusHunterHistoryLang';
+let currentLang = localStorage.getItem(LANG_STORAGE_KEY) || 'en';
+function t(key){ return I18N[currentLang][key]; }
+
+function toggleLang(){
+  currentLang = (currentLang === 'en') ? 'ar' : 'en';
+  try{ localStorage.setItem(LANG_STORAGE_KEY, currentLang); }catch(e){}
+  const body = document.getElementById('bodyRoot');
+  const html = document.getElementById('htmlRoot');
+  body.classList.toggle('lang-ar', currentLang === 'ar');
+  html.dir = (currentLang === 'ar') ? 'rtl' : 'ltr';
+  html.lang = currentLang;
+  applyStaticText();
+  if(allRows.length) renderAll(); // re-render dynamic content (stats/table/chart labels) in the new language
+}
+
+function applyStaticText(){
+  document.title = t('docTitle');
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.getElementById('adminSecretInput').placeholder = t('adminPasswordPlaceholder');
+}
+applyStaticText();
 
 function unlockAdmin(){
   const val = document.getElementById('adminSecretInput').value.trim();
@@ -181,7 +300,7 @@ async function tryShowPanel(){
     document.getElementById('lockScreen').style.display = 'none';
     document.getElementById('panelWrap').style.display = 'block';
   } else {
-    document.getElementById('lockError').textContent = 'Wrong password.';
+    document.getElementById('lockError').textContent = t('wrongPassword');
     localStorage.removeItem(ADMIN_KEY);
     adminSecret = null;
   }
@@ -233,7 +352,7 @@ function showTruncationWarning(truncated){
     el = document.createElement('div');
     el.id = 'truncationWarning';
     el.style.cssText = 'color:var(--gold); font-family:"IBM Plex Mono",monospace; font-size:12px; margin-bottom:16px; padding:10px 14px; background:rgba(212,167,44,0.08); border:1px solid rgba(212,167,44,0.3); border-radius:6px;';
-    el.textContent = 'This range has more data than can be safely loaded at once — numbers below are a partial slice, not the full total. Pick a narrower time range for exact figures.';
+    el.textContent = t('truncationWarning');
     document.getElementById('statsGrid').insertAdjacentElement('beforebegin', el);
   }
 }
@@ -317,7 +436,7 @@ function renderVersionCompare(){
   const tbody = document.getElementById('versionCompareBody');
 
   if(versions.length === 0){
-    tbody.innerHTML = '<tr><td colspan="9" style="color:var(--muted);">No data yet.</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="9" style="color:var(--muted);">${t('noDataYet')}</td></tr>`;
     return;
   }
 
@@ -373,12 +492,12 @@ function renderStats(rows){
   const winRate = resolved > 0 ? ((wins / resolved) * 100).toFixed(1) : '—';
 
   document.getElementById('statsGrid').innerHTML = `
-    <div class="stat-box"><div class="num">${rows.length}</div><div class="lbl">Total signals</div></div>
-    <div class="stat-box win"><div class="num">${wins}</div><div class="lbl">Wins</div></div>
-    <div class="stat-box loss"><div class="num">${losses}</div><div class="lbl">Losses</div></div>
-    <div class="stat-box"><div class="num">${open}</div><div class="lbl">Still open</div></div>
-    <div class="stat-box"><div class="num">${invalidated}</div><div class="lbl">Invalidated</div></div>
-    <div class="stat-box"><div class="num">${winRate}${winRate !== '—' ? '%' : ''}</div><div class="lbl">Win rate</div></div>
+    <div class="stat-box"><div class="num">${rows.length}</div><div class="lbl">${t('statTotalSignals')}</div></div>
+    <div class="stat-box win"><div class="num">${wins}</div><div class="lbl">${t('statWins')}</div></div>
+    <div class="stat-box loss"><div class="num">${losses}</div><div class="lbl">${t('statLosses')}</div></div>
+    <div class="stat-box"><div class="num">${open}</div><div class="lbl">${t('statStillOpen')}</div></div>
+    <div class="stat-box"><div class="num">${invalidated}</div><div class="lbl">${t('statInvalidated')}</div></div>
+    <div class="stat-box"><div class="num">${winRate}${winRate !== '—' ? '%' : ''}</div><div class="lbl">${t('statWinRate')}</div></div>
   `;
 }
 
@@ -389,7 +508,7 @@ function renderChart(rows){
 
   const wrap = document.getElementById('chartWrap');
   if(resolved.length === 0){
-    wrap.innerHTML = '<div class="empty-note">No resolved trades yet.</div>';
+    wrap.innerHTML = `<div class="empty-note">${t('noResolvedTrades')}</div>`;
     return;
   }
 
@@ -423,6 +542,17 @@ function renderChart(rows){
   `;
 }
 
+// Presentational only — maps the raw outcome code (used everywhere else for
+// filtering/comparison) to translated badge text. The code itself never
+// changes based on language.
+function outcomeBadgeLabel(outcome){
+  if(outcome === 'win') return t('badgeWin');
+  if(outcome === 'loss') return t('badgeLoss');
+  if(outcome === 'open') return t('badgeOpen');
+  if(outcome === 'invalidated') return t('badgeInvalidated');
+  return outcome.toUpperCase();
+}
+
 function renderTable(rows){
   const tbody = document.getElementById('historyTableBody');
   const emptyNote = document.getElementById('emptyNote');
@@ -438,12 +568,12 @@ function renderTable(rows){
     <tr>
       <td>${r.symbol || '—'}</td>
       <td>${r.family || '—'}</td>
-      <td class="${r.direction === 'up' ? 'dir-up' : 'dir-down'}">${r.direction === 'up' ? '▲ BUY' : '▼ SELL'}</td>
+      <td class="${r.direction === 'up' ? 'dir-up' : 'dir-down'}">${r.direction === 'up' ? '▲ ' + t('sideBuy') : '▼ ' + t('sideSell')}</td>
       <td>${r.confidence ? r.confidence.toFixed(1) + '%' : '—'}</td>
       <td>${fmtPrice(r.entry_price)}</td>
       <td>${fmtPrice(r.sl_price)}</td>
       <td>${fmtPrice(r.tp_price)}</td>
-      <td><span class="badge ${r.outcome}">${r.outcome.toUpperCase()}</span></td>
+      <td><span class="badge ${r.outcome}">${outcomeBadgeLabel(r.outcome)}</span></td>
       <td>${versionLabel(r)}</td>
       <td>${fmtTime(r.opened_at)}</td>
       <td>${fmtTime(r.closed_at)}</td>
