@@ -456,7 +456,7 @@
 <script>
 const API_URL = '/api/latest';
 const POLL_MS = 4000;
-const CLOSED_VISIBLE_MS = 60 * 1000;      // keep a TP/SL-hit card visible for 1 minute after it closes
+const CLOSED_VISIBLE_MS = 0;              // resolved cards are removed immediately, no afterglow window
 
 const TRACKED_SYMBOLS = [
   'GainX 400','GainX 600','GainX 800','GainX 999','GainX 1200','GainX 1800',
@@ -650,6 +650,21 @@ try{
   firstSeenAt = {};
 }
 
+// Same clock-skew problem, second instance: hit_time (from the EA's
+// TimeCurrent()) was being compared directly against Date.now() to decide
+// when a closed card should disappear. When the broker clock runs ahead of
+// real UTC, that comparison stays "recent" for as long as the skew lasts —
+// sometimes hours — so cards lingered well past CLOSED_VISIBLE_MS. Fixed
+// the same way as firstSeenAt above: anchor to the moment THIS browser
+// first sees the signal as closed, not to the broker's own timestamp.
+const CLOSED_ANCHOR_STORAGE_KEY = 'octopusHunterDevClosedAnchors';
+let closedSeenAt = {};
+try{
+  closedSeenAt = JSON.parse(localStorage.getItem(CLOSED_ANCHOR_STORAGE_KEY) || '{}');
+}catch(e){
+  closedSeenAt = {};
+}
+
 function anchorKey(s){ return s.symbol + ':' + s.sent_at; }
 
 function ensureAnchors(data){
@@ -659,13 +674,22 @@ function ensureAnchors(data){
     const key = anchorKey(s);
     liveKeys.add(key);
     if(!(key in firstSeenAt)) { firstSeenAt[key] = Date.now(); changed = true; }
+
+    const status = s.status || 'active';
+    if(status !== 'active' && !(key in closedSeenAt)) { closedSeenAt[key] = Date.now(); changed = true; }
   }
   // prune old anchors no longer present, so this doesn't grow forever
   for(const key of Object.keys(firstSeenAt)){
     if(!liveKeys.has(key)) { delete firstSeenAt[key]; changed = true; }
   }
+  for(const key of Object.keys(closedSeenAt)){
+    if(!liveKeys.has(key)) { delete closedSeenAt[key]; changed = true; }
+  }
   if(changed){
-    try{ localStorage.setItem(ANCHOR_STORAGE_KEY, JSON.stringify(firstSeenAt)); }catch(e){}
+    try{
+      localStorage.setItem(ANCHOR_STORAGE_KEY, JSON.stringify(firstSeenAt));
+      localStorage.setItem(CLOSED_ANCHOR_STORAGE_KEY, JSON.stringify(closedSeenAt));
+    }catch(e){}
   }
 }
 
@@ -779,8 +803,9 @@ function confirmBadge(confirmations){
 function isVisible(s){
   const status = s.status || 'active';
   if(status === 'active') return true; // no more time-based expiry — only a real TP/SL hit removes a card now
-  if(!s.hit_time) return false;
-  const ageMs = Date.now() - (s.hit_time * 1000);
+  const closedAt = closedSeenAt[anchorKey(s)];
+  if(!closedAt) return true; // just resolved, anchored this same render pass — show it
+  const ageMs = Date.now() - closedAt;
   return ageMs < CLOSED_VISIBLE_MS;
 }
 
