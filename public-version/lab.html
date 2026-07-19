@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Octopus Hunter — Strategy Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a1016; --panel:#121a1f; --border:#1f2f33; --text:#e4e7eb;
+    --muted:#6b7280; --up:#35c77e; --down:#e5484d; --gold:#d4a72c; --accent:#2ea8a8;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{ background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; padding:24px 16px 60px; }
+  .wrap{ max-width:1200px; margin:0 auto; }
+  .page-head{ display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:24px; }
+  h1{ font-family:'IBM Plex Mono',monospace; font-size:20px; }
+  h2{ font-family:'IBM Plex Mono',monospace; font-size:14px; color:var(--muted); margin-bottom:14px; font-weight:600; }
+  .nav-btn{
+    background:var(--panel); border:1px solid var(--border); color:var(--text);
+    font-family:'IBM Plex Mono',monospace; font-size:12px; padding:8px 14px;
+    border-radius:6px; cursor:pointer; text-decoration:none; display:inline-block;
+  }
+  .nav-btn:hover{ border-color:var(--accent); }
+  .panel{ background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:20px; margin-bottom:20px; }
+  label{ font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em; display:block; margin-bottom:6px; }
+  input, select{
+    background:#0e1119; border:1px solid var(--border); color:var(--text);
+    font-family:'IBM Plex Mono',monospace; font-size:14px; padding:10px 12px; border-radius:6px;
+  }
+  button{
+    background:var(--accent); border:none; color:#04120f; font-family:'IBM Plex Mono',monospace;
+    font-weight:700; font-size:13px; padding:10px 16px; border-radius:6px; cursor:pointer;
+  }
+  button.secondary{ background:var(--panel); border:1px solid var(--border); color:var(--text); }
+  .table-scroll{ overflow-x:auto; }
+  table{ width:100%; border-collapse:collapse; font-size:12px; }
+  th, td{ text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); font-family:'IBM Plex Mono',monospace; white-space:nowrap; }
+  th{ color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:0.05em; }
+  th.metric-col, td.metric-col{ position:sticky; left:0; background:var(--panel); color:var(--text); font-weight:600; z-index:1; }
+  td.baseline-col, th.baseline-col{ background:rgba(212,167,44,0.06); }
+  .pos{ color:var(--up); } .neg{ color:var(--down); } .neutral{ color:var(--muted); }
+  .verdict-card{ background:#0e1119; border:1px solid var(--border); border-radius:8px; padding:16px; margin-bottom:12px; }
+  .verdict-card .v-title{ font-family:'IBM Plex Mono',monospace; font-size:14px; font-weight:700; margin-bottom:6px; }
+  .verdict-card .v-body{ font-size:13px; color:var(--text); line-height:1.6; }
+  .verdict.adopt{ color:var(--up); } .verdict.reject{ color:var(--down); } .verdict.wait{ color:var(--gold); }
+  #lockScreen{ max-width:340px; margin:80px auto; text-align:center; }
+  .error{ color:var(--down); font-size:13px; margin-top:10px; }
+  .empty-note{ color:var(--muted); font-family:'IBM Plex Mono',monospace; font-size:13px; text-align:center; padding:30px 0; }
+  .thresholds-note{ font-size:11px; color:var(--muted); margin-top:10px; line-height:1.6; }
+  .baseline-selector{ display:flex; gap:12px; align-items:flex-end; margin-bottom:20px; flex-wrap:wrap; }
+</style>
+</head>
+<body>
+
+<div id="lockScreen">
+  <h1>Strategy Lab — Admin Access</h1>
+  <label>Admin password</label>
+  <input type="password" id="adminSecretInput" style="width:100%; margin-bottom:14px;" placeholder="Enter admin password">
+  <button onclick="unlockAdmin()" style="width:100%;">Unlock</button>
+  <div class="error" id="lockError"></div>
+</div>
+
+<div class="wrap" id="panelWrap" style="display:none;">
+  <div class="page-head">
+    <h1>🧪 Octopus Hunter — Strategy Lab</h1>
+    <div style="display:flex; gap:10px;">
+      <a class="nav-btn" href="/admin.html">⚙️ Admin</a>
+      <a class="nav-btn" href="/history.html">📊 Performance</a>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="baseline-selector">
+      <div>
+        <label>Baseline version</label>
+        <select id="baselineSelect" onchange="renderAll()" style="min-width:320px;"></select>
+      </div>
+      <button class="secondary" onclick="loadData()">Refresh</button>
+    </div>
+    <div class="thresholds-note" id="thresholdsNote"></div>
+  </div>
+
+  <div class="panel">
+    <h2 id="statsHeading">Full statistics by version</h2>
+    <div class="table-scroll">
+      <table id="statsTable"></table>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Win rate by family</h2>
+    <div class="table-scroll">
+      <table id="familyTable"></table>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Win rate by symbol</h2>
+    <div class="table-scroll">
+      <table id="symbolTable"></table>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Verdict vs Baseline</h2>
+    <div id="verdictWrap"></div>
+  </div>
+</div>
+
+<script>
+const ADMIN_KEY = 'octopusHunterAdminSecret';
+let adminSecret = localStorage.getItem(ADMIN_KEY);
+let allRows = [];
+let versionStats = {}; // version -> computed metrics object
+let selectedBaseline = null;
+
+// --- Disclosed evaluation thresholds -------------------------------------
+// Stated openly rather than buried in logic, per "no assumptions, no
+// guessing" — these are the exact bars a version must clear to be called
+// an improvement, not a subjective judgment call made per-comparison.
+const MIN_RESOLVED_SAMPLE = 30;       // below this, no verdict is given at all
+const WIN_RATE_MEANINGFUL_DELTA = 3.0; // percentage points
+const EXPECTANCY_MEANINGFUL_DELTA_PCT = 10.0; // relative % change
+
+const LEGACY_VERSION_LABEL = 'v0_legacy (pre-tracking)';
+function versionLabel(row){ return row.strategy_version || LEGACY_VERSION_LABEL; }
+
+function unlockAdmin(){
+  const val = document.getElementById('adminSecretInput').value.trim();
+  if(!val) return;
+  adminSecret = val;
+  localStorage.setItem(ADMIN_KEY, val);
+  tryShowPanel();
+}
+
+async function tryShowPanel(){
+  const ok = await loadData();
+  if(ok){
+    document.getElementById('lockScreen').style.display = 'none';
+    document.getElementById('panelWrap').style.display = 'block';
+  } else {
+    document.getElementById('lockError').textContent = 'Wrong password.';
+    localStorage.removeItem(ADMIN_KEY);
+    adminSecret = null;
+  }
+}
+
+async function loadData(){
+  try{
+    const res = await fetch('/api/history?admin_secret=' + encodeURIComponent(adminSecret));
+    if(!res.ok) return false;
+    const payload = await res.json();
+    allRows = payload.rows;
+    computeAllVersionStats();
+    populateBaselineSelect();
+    renderAll();
+    return true;
+  }catch(e){
+    return false;
+  }
+}
+
+// --- Metric computation ---------------------------------------------------
+// All price-distance metrics (profit/loss/expectancy/etc.) are expressed in
+// raw price points, NOT currency — this is a signal-only system with no
+// position sizing or lot size, so there is no account-currency P&L to
+// compute. Wins gain exactly |tp_price - entry_price| (that's what "hit TP"
+// means); losses cost exactly |entry_price - sl_price|. Both are
+// deterministic from the stored trade parameters, not estimates.
+function computeVersionStats(rows){
+  const wins = rows.filter(r => r.outcome === 'win');
+  const losses = rows.filter(r => r.outcome === 'loss');
+  const open = rows.filter(r => r.outcome === 'open');
+  const invalidated = rows.filter(r => r.outcome === 'invalidated');
+  const resolved = wins.length + losses.length;
+
+  const avg = arr => arr.length ? arr.reduce((a,b) => a+b, 0) / arr.length : null;
+  const dist = (r, a, b) => (r[a] != null && r[b] != null) ? Math.abs(r[a] - r[b]) : null;
+
+  const confAll = rows.map(r => r.confidence).filter(v => v != null);
+  const confWin = wins.map(r => r.confidence).filter(v => v != null);
+  const confLoss = losses.map(r => r.confidence).filter(v => v != null);
+
+  const slDistances = rows.map(r => dist(r,'entry_price','sl_price')).filter(v => v != null);
+  const tpDistances = rows.map(r => dist(r,'entry_price','tp_price')).filter(v => v != null);
+
+  const winGains = wins.map(r => dist(r,'entry_price','tp_price')).filter(v => v != null);
+  const lossCosts = losses.map(r => dist(r,'entry_price','sl_price')).filter(v => v != null);
+
+  const durations = rows
+    .filter(r => (r.outcome === 'win' || r.outcome === 'loss') && r.opened_at && r.closed_at)
+    .map(r => r.closed_at - r.opened_at)
+    .filter(v => v > 0);
+
+  const openedTimes = rows.map(r => r.opened_at).filter(Boolean);
+  const spanHours = openedTimes.length > 1 ? (Math.max(...openedTimes) - Math.min(...openedTimes)) / 3600 : 0;
+
+  const winRatePct = resolved > 0 ? (wins.length / resolved) * 100 : null;
+  const avgWin = avg(winGains);
+  const avgLoss = avg(lossCosts);
+  const grossProfit = winGains.reduce((a,b) => a+b, 0);
+  const grossLoss = lossCosts.reduce((a,b) => a+b, 0);
+
+  return {
+    totalSignals: rows.length,
+    wins: wins.length, losses: losses.length, open: open.length, invalidated: invalidated.length,
+    resolved,
+    winRatePct,
+    avgConfidence: avg(confAll),
+    avgConfidenceWin: avg(confWin),
+    avgConfidenceLoss: avg(confLoss),
+    avgDurationMin: durations.length ? avg(durations) / 60 : null,
+    avgSLDistance: avg(slDistances),
+    avgTPDistance: avg(tpDistances),
+    avgProfitPerWin: avgWin,
+    avgLossPerLoss: avgLoss,
+    riskReward: (avgWin != null && avgLoss) ? avgWin / avgLoss : null,
+    expectancy: (winRatePct != null && avgWin != null && avgLoss != null)
+      ? (winRatePct/100 * avgWin) - ((1 - winRatePct/100) * avgLoss)
+      : null,
+    profitFactor: (grossLoss > 0) ? grossProfit / grossLoss : null,
+    spanHours,
+    signalsPerHour: spanHours >= 0.1 ? rows.length / spanHours : null,
+    winRateByFamily: winRateGroupBy(rows, 'family'),
+    winRateBySymbol: winRateGroupBy(rows, 'symbol')
+  };
+}
+
+function winRateGroupBy(rows, field){
+  const groups = {};
+  rows.forEach(r => {
+    const key = r[field] || '—';
+    if(!groups[key]) groups[key] = { wins: 0, losses: 0 };
+    if(r.outcome === 'win') groups[key].wins++;
+    else if(r.outcome === 'loss') groups[key].losses++;
+  });
+  const out = {};
+  Object.keys(groups).forEach(key => {
+    const g = groups[key];
+    const resolved = g.wins + g.losses;
+    out[key] = { wins: g.wins, losses: g.losses, winRatePct: resolved > 0 ? (g.wins/resolved)*100 : null };
+  });
+  return out;
+}
+
+function computeAllVersionStats(){
+  versionStats = {};
+  const versions = [...new Set(allRows.map(versionLabel))];
+  versions.forEach(v => {
+    versionStats[v] = computeVersionStats(allRows.filter(r => versionLabel(r) === v));
+  });
+}
+
+// Auto-detect the purest baseline: legacy SL, no BBW, no RSI. Falls back to
+// whichever version has the earliest signals if no exact match exists yet.
+function detectBaselineVersion(){
+  const versions = Object.keys(versionStats);
+  const pure = versions.find(v => v.includes('_legacySL') && !v.includes('_bbw') && !v.includes('_rsi'));
+  if(pure) return pure;
+  let earliest = null, earliestTime = Infinity;
+  allRows.forEach(r => {
+    if(r.opened_at && r.opened_at < earliestTime){ earliestTime = r.opened_at; earliest = versionLabel(r); }
+  });
+  return earliest || versions[0] || null;
+}
+
+function populateBaselineSelect(){
+  const select = document.getElementById('baselineSelect');
+  const versions = Object.keys(versionStats).sort();
+  const auto = detectBaselineVersion();
+  selectedBaseline = selectedBaseline && versions.includes(selectedBaseline) ? selectedBaseline : auto;
+  select.innerHTML = versions.map(v =>
+    `<option value="${v}" ${v === selectedBaseline ? 'selected' : ''}>${v}${v === auto ? '  (auto-detected)' : ''}</option>`
+  ).join('');
+  select.onchange = () => { selectedBaseline = select.value; renderAll(); };
+}
+
+// --- Formatting helpers ----------------------------------------------------
+function fmtNum(v, decimals){ return (v == null || isNaN(v)) ? '—' : v.toFixed(decimals); }
+function fmtPct(v){ return (v == null || isNaN(v)) ? '—' : v.toFixed(1) + '%'; }
+function fmtPrice(v){ return (v == null || isNaN(v)) ? '—' : v.toFixed(v >= 100 ? 2 : 5); }
+function fmtDuration(mins){
+  if(mins == null || isNaN(mins)) return '—';
+  if(mins < 60) return mins.toFixed(1) + 'm';
+  return (mins/60).toFixed(1) + 'h';
+}
+
+function renderAll(){
+  renderStatsTable();
+  renderFamilyTable();
+  renderSymbolTable();
+  renderVerdicts();
+  document.getElementById('thresholdsNote').innerHTML =
+    `Verdict thresholds (disclosed, not hidden logic): a version needs at least <b>${MIN_RESOLVED_SAMPLE} resolved trades</b> before any verdict is given. ` +
+    `"Adopt" requires a win-rate improvement of at least <b>${WIN_RATE_MEANINGFUL_DELTA} points</b> AND non-negative expectancy change. ` +
+    `A win-rate improvement smaller than that is flagged "reject — too small to justify complexity", even if nominally positive.`;
+}
+
+function renderStatsTable(){
+  const versions = Object.keys(versionStats).sort();
+  const rowsDef = [
+    ['Total signals', v => versionStats[v].totalSignals, 'int'],
+    ['Wins', v => versionStats[v].wins, 'int'],
+    ['Losses', v => versionStats[v].losses, 'int'],
+    ['Still open', v => versionStats[v].open, 'int'],
+    ['Invalidated', v => versionStats[v].invalidated, 'int'],
+    ['Resolved (W+L)', v => versionStats[v].resolved, 'int'],
+    ['Win rate', v => versionStats[v].winRatePct, 'pct'],
+    ['Signals / hour', v => versionStats[v].signalsPerHour, 'num2'],
+    ['Time span tested', v => versionStats[v].spanHours, 'hours'],
+    ['Avg confidence', v => versionStats[v].avgConfidence, 'num1'],
+    ['Avg confidence (winners)', v => versionStats[v].avgConfidenceWin, 'num1'],
+    ['Avg confidence (losers)', v => versionStats[v].avgConfidenceLoss, 'num1'],
+    ['Avg trade duration', v => versionStats[v].avgDurationMin, 'duration'],
+    ['Avg SL distance', v => versionStats[v].avgSLDistance, 'price'],
+    ['Avg TP distance', v => versionStats[v].avgTPDistance, 'price'],
+    ['Avg profit per win', v => versionStats[v].avgProfitPerWin, 'price'],
+    ['Avg loss per loss', v => versionStats[v].avgLossPerLoss, 'price'],
+    ['Risk : Reward', v => versionStats[v].riskReward, 'ratio'],
+    ['Expectancy (per trade)', v => versionStats[v].expectancy, 'price'],
+    ['Profit factor', v => versionStats[v].profitFactor, 'num2']
+  ];
+
+  let html = '<thead><tr><th class="metric-col">Metric</th>' +
+    versions.map(v => `<th class="${v === selectedBaseline ? 'baseline-col' : ''}">${v}${v === selectedBaseline ? ' ★' : ''}</th>`).join('') +
+    '</tr></thead><tbody>';
+
+  rowsDef.forEach(([label, getter, type]) => {
+    html += `<tr><td class="metric-col">${label}</td>`;
+    versions.forEach(v => {
+      const val = getter(v);
+      let display;
+      if(type === 'int') display = (val == null ? '—' : val);
+      else if(type === 'pct') display = fmtPct(val);
+      else if(type === 'num1') display = fmtNum(val, 1);
+      else if(type === 'num2') display = fmtNum(val, 2);
+      else if(type === 'price') display = fmtPrice(val);
+      else if(type === 'duration') display = fmtDuration(val);
+      else if(type === 'ratio') display = val == null ? '—' : val.toFixed(2) + ':1';
+      else if(type === 'hours') display = val == null ? '—' : val.toFixed(1) + 'h';
+      html += `<td class="${v === selectedBaseline ? 'baseline-col' : ''}">${display}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody>';
+  document.getElementById('statsTable').innerHTML = html;
+}
+
+function renderGroupTable(elId, groupField){
+  const versions = Object.keys(versionStats).sort();
+  const allKeys = new Set();
+  versions.forEach(v => Object.keys(versionStats[v][groupField]).forEach(k => allKeys.add(k)));
+  const keys = [...allKeys].sort();
+
+  let html = '<thead><tr><th class="metric-col">' + (groupField === 'winRateByFamily' ? 'Family' : 'Symbol') + '</th>' +
+    versions.map(v => `<th class="${v === selectedBaseline ? 'baseline-col' : ''}">${v}</th>`).join('') +
+    '</tr></thead><tbody>';
+
+  if(keys.length === 0){
+    html += `<tr><td colspan="${versions.length+1}" style="color:var(--muted);">No data yet.</td></tr>`;
+  }
+
+  keys.forEach(key => {
+    html += `<tr><td class="metric-col">${key}</td>`;
+    versions.forEach(v => {
+      const g = versionStats[v][groupField][key];
+      const display = g ? `${fmtPct(g.winRatePct)} (${g.wins}W/${g.losses}L)` : '—';
+      html += `<td class="${v === selectedBaseline ? 'baseline-col' : ''}">${display}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody>';
+  document.getElementById(elId).innerHTML = html;
+}
+
+function renderFamilyTable(){ renderGroupTable('familyTable', 'winRateByFamily'); }
+function renderSymbolTable(){ renderGroupTable('symbolTable', 'winRateBySymbol'); }
+
+function computeVerdict(baseline, candidate){
+  const b = versionStats[baseline];
+  const c = versionStats[candidate];
+
+  if(c.resolved < MIN_RESOLVED_SAMPLE){
+    return {
+      cls: 'wait',
+      title: '⏳ Insufficient data',
+      body: `Only ${c.resolved} resolved trades (need at least ${MIN_RESOLVED_SAMPLE}). No verdict can be given yet — ` +
+            `keep this version running rather than drawing a conclusion from a sample this small.`
+    };
+  }
+  if(b.resolved < MIN_RESOLVED_SAMPLE){
+    return {
+      cls: 'wait',
+      title: '⏳ Baseline needs more data',
+      body: `The selected baseline ("${baseline}") only has ${b.resolved} resolved trades — too few to compare against reliably yet.`
+    };
+  }
+
+  const winRateDelta = c.winRatePct - b.winRatePct;
+  const expectancyDelta = (b.expectancy !== 0 && b.expectancy != null)
+    ? ((c.expectancy - b.expectancy) / Math.abs(b.expectancy)) * 100
+    : (c.expectancy > 0 ? 100 : 0);
+  const profitFactorDelta = (c.profitFactor != null && b.profitFactor != null) ? c.profitFactor - b.profitFactor : null;
+  const quantityDelta = (b.signalsPerHour && c.signalsPerHour)
+    ? ((c.signalsPerHour - b.signalsPerHour) / b.signalsPerHour) * 100
+    : null;
+
+  const summary = `Win rate ${winRateDelta >= 0 ? '+' : ''}${winRateDelta.toFixed(1)}pp, ` +
+    `expectancy ${expectancyDelta >= 0 ? '+' : ''}${expectancyDelta.toFixed(1)}%, ` +
+    `profit factor ${profitFactorDelta == null ? '—' : (profitFactorDelta >= 0 ? '+' : '') + profitFactorDelta.toFixed(2)}, ` +
+    `signal rate ${quantityDelta == null ? '—' : (quantityDelta >= 0 ? '+' : '') + quantityDelta.toFixed(0) + '%'} vs baseline.`;
+
+  // Clearly worse: either win rate drops meaningfully, or expectancy drops materially.
+  if(winRateDelta <= -WIN_RATE_MEANINGFUL_DELTA || expectancyDelta <= -EXPECTANCY_MEANINGFUL_DELTA_PCT){
+    return { cls: 'reject', title: '❌ Reject — underperforms Baseline', body: summary };
+  }
+  // Clear improvement: meaningful win-rate gain AND expectancy didn't get worse.
+  if(winRateDelta >= WIN_RATE_MEANINGFUL_DELTA && expectancyDelta >= 0){
+    return { cls: 'adopt', title: '✅ Adopt — meaningful improvement', body: summary };
+  }
+  // Everything else: technically not worse, but not clearly better either —
+  // per your explicit instruction, a small edge isn't worth the complexity.
+  return { cls: 'reject', title: '➖ Reject — improvement too small to justify added complexity', body: summary };
+}
+
+function renderVerdicts(){
+  const versions = Object.keys(versionStats).sort();
+  const wrap = document.getElementById('verdictWrap');
+  const candidates = versions.filter(v => v !== selectedBaseline);
+
+  if(!selectedBaseline || candidates.length === 0){
+    wrap.innerHTML = '<div class="empty-note">Need at least one non-baseline version with data to compare.</div>';
+    return;
+  }
+
+  wrap.innerHTML = candidates.map(v => {
+    const verdict = computeVerdict(selectedBaseline, v);
+    return `
+      <div class="verdict-card">
+        <div class="v-title verdict ${verdict.cls}">${v} — ${verdict.title}</div>
+        <div class="v-body">${verdict.body}</div>
+      </div>`;
+  }).join('');
+}
+
+if(adminSecret){
+  tryShowPanel();
+}
+</script>
+
+</body>
+</html>
