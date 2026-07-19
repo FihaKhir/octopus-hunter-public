@@ -56,14 +56,17 @@ export default async function handler(req, res) {
     if (baseline_atr_value !== undefined) row.baseline_atr_value = baseline_atr_value;
     if (rsi_value !== undefined) row.rsi_value = rsi_value;
 
+    console.log(`[${symbol}] received payload: status=${status || 'active'}, entry_price=${entry_price}, sent_at=${sent_at}`);
+
     const { error } = await supabase
       .from('signals')
       .upsert(row, { onConflict: 'symbol' });
 
     if (error) {
-      console.error('Supabase error:', error);
+      console.error(`[${symbol}] signals upsert FAILED:`, error);
       return res.status(500).json({ error: error.message });
     }
+    console.log(`[${symbol}] signals upsert OK (dashboard will show this)`);
 
     // --- Trade history logging -----------------------------------------
     // Isolated in its own try/catch so a trade_history failure can never
@@ -88,27 +91,43 @@ export default async function handler(req, res) {
           .eq('symbol', symbol)
           .eq('outcome', 'open');
         if (staleCloseError) {
-          console.error('trade_history stale-close error:', staleCloseError);
+          console.error(`[${symbol}] trade_history stale-close error:`, staleCloseError);
         }
 
-        const { error: historyInsertError } = await supabase
+        const historyRow = {
+          symbol, family, direction, confidence,
+          entry_price, sl_price, tp_price, timeframe,
+          outcome: 'open',
+          opened_at: sent_at,
+          strategy_version: strategy_version ?? null
+        };
+        // Diagnostic-only columns, captured separately from the core row.
+        // If these columns don't exist yet (e.g. a migration hasn't been
+        // run against this Supabase project), a schema error here must
+        // NEVER cost us the core trade_history row — that's the actual
+        // record of the trade, and losing it silently is exactly the bug
+        // being traced right now. See the fallback insert below.
+        const diagnosticFields = {
+          atr_at_entry: atr_value ?? null,
+          baseline_atr_at_entry: baseline_atr_value ?? null,
+          compression_at_entry: components?.compression ?? null
+        };
+
+        let { error: historyInsertError } = await supabase
           .from('trade_history')
-          .insert({
-            symbol, family, direction, confidence,
-            entry_price, sl_price, tp_price, timeframe,
-            outcome: 'open',
-            opened_at: sent_at,
-            strategy_version: strategy_version ?? null,
-            // Captured so the baseline-ATR SL hypothesis can be validated
-            // rigorously from this point forward — this data never existed
-            // in trade_history before, which is why the original hypothesis
-            // couldn't be backtested against pre-existing rows.
-            atr_at_entry: atr_value ?? null,
-            baseline_atr_at_entry: baseline_atr_value ?? null,
-            compression_at_entry: components?.compression ?? null
-          });
+          .insert({ ...historyRow, ...diagnosticFields });
+
         if (historyInsertError) {
-          console.error('trade_history insert error:', historyInsertError);
+          console.error(`[${symbol}] trade_history insert FAILED with diagnostic fields:`, historyInsertError);
+          console.log(`[${symbol}] retrying trade_history insert with core fields only...`);
+          const retry = await supabase.from('trade_history').insert(historyRow);
+          if (retry.error) {
+            console.error(`[${symbol}] trade_history insert FAILED even without diagnostic fields — row was NOT recorded:`, retry.error);
+          } else {
+            console.log(`[${symbol}] trade_history row created OK (core fields only — check whether the diagnostic-column migration has been run)`);
+          }
+        } else {
+          console.log(`[${symbol}] trade_history row created OK (outcome=open) — History page should now show this signal`);
         }
       } else if (isResolution) {
         const { data: openRow, error: findError } = await supabase
@@ -121,7 +140,7 @@ export default async function handler(req, res) {
           .maybeSingle();
 
         if (findError) {
-          console.error('trade_history lookup error:', findError);
+          console.error(`[${symbol}] trade_history lookup error:`, findError);
         } else if (openRow) {
           const { error: updateError } = await supabase
             .from('trade_history')
@@ -131,15 +150,19 @@ export default async function handler(req, res) {
             })
             .eq('id', openRow.id);
           if (updateError) {
-            console.error('trade_history update error:', updateError);
+            console.error(`[${symbol}] trade_history resolution update FAILED:`, updateError);
+          } else {
+            console.log(`[${symbol}] trade_history row resolved OK (outcome=${status === 'tp_hit' ? 'win' : 'loss'})`);
           }
+        } else {
+          console.log(`[${symbol}] resolution received but no matching OPEN trade_history row found — nothing to update (this is expected if the row predates trade_history existing, but check for it if it happens on a symbol that should have one)`);
         }
         // No matching 'open' row is not treated as an error — it can happen
         // if the history table was only just created and this symbol's
         // still-open signal predates it.
       }
     } catch (historyErr) {
-      console.error('trade_history logging failed (non-fatal):', historyErr);
+      console.error(`[${symbol}] trade_history logging threw an exception (non-fatal, signals table already updated):`, historyErr);
     }
 
     return res.status(200).json({ ok: true });
