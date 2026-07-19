@@ -18,10 +18,10 @@ export default async function handler(req, res) {
   try {
     const {
       symbol, family, direction, confidence, components, confirmations,
-      atr_value, entry_price, sl_price, tp_price,
+      atr_value, baseline_atr_value, entry_price, sl_price, tp_price,
       ticks_since_jump, expected_gap_ticks, family_score, sl_proximity,
       timeframe, status, hit_time, bar_time, sent_at,
-      bbw_score, strategy_version
+      bbw_score, rsi_value, strategy_version
     } = req.body;
 
     if (!symbol) {
@@ -53,6 +53,8 @@ export default async function handler(req, res) {
     if (sent_at !== undefined) row.sent_at = sent_at;
     if (bbw_score !== undefined) row.bbw_score = bbw_score;
     if (strategy_version !== undefined) row.strategy_version = strategy_version;
+    if (baseline_atr_value !== undefined) row.baseline_atr_value = baseline_atr_value;
+    if (rsi_value !== undefined) row.rsi_value = rsi_value;
 
     const { error } = await supabase
       .from('signals')
@@ -96,7 +98,14 @@ export default async function handler(req, res) {
             entry_price, sl_price, tp_price, timeframe,
             outcome: 'open',
             opened_at: sent_at,
-            strategy_version: strategy_version ?? null
+            strategy_version: strategy_version ?? null,
+            // Captured so the baseline-ATR SL hypothesis can be validated
+            // rigorously from this point forward — this data never existed
+            // in trade_history before, which is why the original hypothesis
+            // couldn't be backtested against pre-existing rows.
+            atr_at_entry: atr_value ?? null,
+            baseline_atr_at_entry: baseline_atr_value ?? null,
+            compression_at_entry: components?.compression ?? null
           });
         if (historyInsertError) {
           console.error('trade_history insert error:', historyInsertError);
