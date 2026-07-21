@@ -55,6 +55,11 @@
   .visibility-save-row{ display:flex; align-items:center; gap:12px; }
   .save-note{ font-size:12px; color:var(--muted); }
   .save-note.success{ color:var(--up); }
+  .danger-panel{ border-color:rgba(229,72,77,0.4); }
+  .danger-panel h3{ font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--down); margin-bottom:14px; }
+  button.danger{ background:var(--down); color:#1a0505; }
+  button.danger:disabled{ background:var(--panel); color:var(--muted); border:1px solid var(--border); cursor:not-allowed; }
+  .warning-text{ font-size:12px; color:var(--muted); line-height:1.6; margin-bottom:14px; }
 </style>
 </head>
 <body>
@@ -101,6 +106,29 @@
     </div>
   </div>
 
+  <div class="panel danger-panel">
+    <h3>⚠️ Reset Trade History</h3>
+    <div class="warning-text">
+      Permanently deletes rows from <code>trade_history</code> (the data behind History and Strategy Lab). This does <b>not</b> touch the live dashboard, access codes, or the EA's live signals table — only the historical record. This cannot be undone.
+    </div>
+    <label>Scope</label>
+    <select id="resetScope" onchange="onResetScopeChange()">
+      <option value="version">One strategy version only</option>
+      <option value="all">Everything</option>
+    </select>
+    <div id="resetVersionRow">
+      <label>Strategy version to delete</label>
+      <select id="resetVersionSelect"><option value="">Loading…</option></select>
+    </div>
+    <label style="display:flex; align-items:center; gap:8px; text-transform:none; font-size:13px; color:var(--text); margin-bottom:14px;">
+      <input type="checkbox" id="resetNearMisses" style="width:auto; margin:0;"> Also clear matching rows in the near-miss diagnostic log
+    </label>
+    <label>Type RESET to confirm</label>
+    <input type="text" id="resetConfirmInput" placeholder="RESET" oninput="onResetConfirmInput()">
+    <button class="danger" id="resetBtn" disabled onclick="performReset()">Delete</button>
+    <div class="save-note" id="resetResultNote"></div>
+  </div>
+
   <div class="panel">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
       <span style="font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--muted);">All codes</span>
@@ -134,6 +162,7 @@ async function tryShowPanel(){
     document.getElementById('lockScreen').style.display = 'none';
     document.getElementById('adminPanel').style.display = 'block';
     loadSymbolVisibility();
+    loadResetVersionOptions();
   } else {
     document.getElementById('lockError').textContent = 'Wrong password.';
     localStorage.removeItem(ADMIN_KEY);
@@ -239,6 +268,81 @@ async function saveSymbolVisibility(){
     }
     note.className = 'save-note success';
     note.textContent = `Saved — ${hidden_symbols.length} symbol(s) hidden from the public dashboard.`;
+  }catch(e){
+    note.textContent = 'Network error.';
+  }
+}
+
+function onResetScopeChange(){
+  const scope = document.getElementById('resetScope').value;
+  document.getElementById('resetVersionRow').style.display = (scope === 'version') ? 'block' : 'none';
+}
+
+function onResetConfirmInput(){
+  const typed = document.getElementById('resetConfirmInput').value.trim();
+  document.getElementById('resetBtn').disabled = (typed !== 'RESET');
+}
+
+async function loadResetVersionOptions(){
+  const select = document.getElementById('resetVersionSelect');
+  try{
+    const res = await fetch('/api/history?admin_secret=' + encodeURIComponent(adminSecret));
+    if(!res.ok){
+      select.innerHTML = '<option value="">Failed to load versions</option>';
+      return;
+    }
+    const { rows } = await res.json();
+    // "" (empty string) represents the untagged/pre-tracking rows
+    // (strategy_version IS NULL) — sent to the API as null, not the string "null".
+    const versions = [...new Set(rows.map(r => r.strategy_version || ''))].sort();
+    select.innerHTML = versions.map(v =>
+      `<option value="${v}">${v || 'v0_legacy (pre-tracking, untagged rows)'}</option>`
+    ).join('');
+  }catch(e){
+    select.innerHTML = '<option value="">Network error</option>';
+  }
+}
+
+async function performReset(){
+  const scope = document.getElementById('resetScope').value;
+  const versionSelectVal = document.getElementById('resetVersionSelect').value;
+  const also_clear_near_misses = document.getElementById('resetNearMisses').checked;
+  const note = document.getElementById('resetResultNote');
+
+  const scopeDescription = scope === 'all'
+    ? 'ALL trade history, every version'
+    : `only "${versionSelectVal || 'v0_legacy (pre-tracking, untagged rows)'}"`;
+
+  if(!confirm(`This will permanently delete ${scopeDescription}. This cannot be undone. Continue?`)){
+    return;
+  }
+
+  note.className = 'save-note';
+  note.textContent = 'Deleting…';
+
+  try{
+    const body = { admin_secret: adminSecret, scope, also_clear_near_misses };
+    if(scope === 'version') body.strategy_version = versionSelectVal || null;
+
+    const res = await fetch('/api/reset-history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if(!res.ok){
+      note.className = 'save-note';
+      note.style.color = 'var(--down)';
+      note.textContent = data.error || 'Failed to reset.';
+      return;
+    }
+    note.className = 'save-note success';
+    note.style.color = '';
+    note.textContent = `Deleted ${data.deletedCount} trade_history row(s)` +
+      (also_clear_near_misses ? ` and ${data.nearMissDeletedCount} near_misses row(s)` : '') + '.';
+    document.getElementById('resetConfirmInput').value = '';
+    document.getElementById('resetBtn').disabled = true;
+    loadResetVersionOptions();
   }catch(e){
     note.textContent = 'Network error.';
   }
