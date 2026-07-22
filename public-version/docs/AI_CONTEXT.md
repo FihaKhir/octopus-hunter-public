@@ -2030,3 +2030,738 @@ The objective is to create a more reliable trading product.
 
 ```
 ```
+# 15. Development Environment & Technology Stack
+
+## 15.1 Technology Overview
+
+Octopus Hunter uses a combination of trading, backend, database, and web technologies.
+
+The technology choices are based on:
+
+* Reliability.
+* Low maintenance.
+* Scalability.
+* Fast development.
+* Compatibility with MT5.
+
+---
+
+# 15.2 Trading Platform
+
+## MetaTrader 5
+
+Technology:
+
+MQL5 Expert Advisor
+
+Purpose:
+
+The core execution and analysis environment.
+
+Responsibilities:
+
+* Receive market data.
+* Analyze symbols.
+* Execute strategy logic.
+* Manage trades.
+* Communicate with backend services.
+
+MT5 is the only environment responsible for trading decisions.
+
+---
+
+# 15.3 Backend Infrastructure
+
+## Vercel Serverless Platform
+
+Purpose:
+
+Hosts the backend API layer.
+
+Responsibilities:
+
+* Deploy API endpoints.
+* Handle requests from MT5.
+* Provide data to frontend.
+* Connect with database services.
+
+Advantages:
+
+* Simple deployment.
+* Automatic scaling.
+* Low infrastructure management.
+
+---
+
+# 15.4 Database Platform
+
+## Supabase
+
+Technology:
+
+PostgreSQL Database
+
+Purpose:
+
+Permanent storage layer.
+
+Responsibilities:
+
+* Store signals.
+* Store trade history.
+* Store licenses.
+* Store configurations.
+* Store diagnostic information.
+
+Supabase provides:
+
+* Database management.
+* Authentication capabilities.
+* API connectivity.
+* Data persistence.
+
+---
+
+# 15.5 Frontend Technology
+
+## Web Dashboard
+
+Technology:
+
+HTML / CSS / JavaScript
+
+Purpose:
+
+User interface layer.
+
+Responsibilities:
+
+* Display live signals.
+* Display history.
+* Display analytics.
+* Provide administration tools.
+
+The frontend remains separated from trading logic.
+
+---
+
+# 15.6 Development Tools
+
+Current development workflow may include:
+
+## Code Editors
+
+Used for:
+
+* MQL5 development.
+* JavaScript development.
+* Configuration editing.
+
+---
+
+## Version Control
+
+Purpose:
+
+Track project changes.
+
+Responsibilities:
+
+* Preserve history.
+* Compare versions.
+* Allow rollback.
+
+---
+
+## AI Development Assistants
+
+Possible AI team members:
+
+### ChatGPT
+
+Role:
+
+* CTO guidance.
+* Architecture decisions.
+* Code review.
+* Strategy evaluation.
+* Documentation.
+
+---
+
+### GitHub Copilot
+
+Role:
+
+* Code completion.
+* Implementation assistance.
+* Refactoring support.
+
+---
+
+### Claude
+
+Role:
+
+* Large code analysis.
+* Alternative implementation review.
+* Complex debugging assistance.
+
+---
+
+### Gemini
+
+Role:
+
+* Additional analysis.
+* Research support.
+* Independent review.
+
+---
+
+# 15.7 AI Collaboration Rules
+
+AI tools should not directly replace engineering decisions.
+
+The workflow is:
+
+```text
+Problem
+
+↓
+
+Architecture Analysis
+
+↓
+
+Choose Appropriate AI
+
+↓
+
+Generate Solution
+
+↓
+
+Review
+
+↓
+
+Test
+
+↓
+
+Accept or Reject
+```
+
+---
+
+# 15.8 Environment Principles
+
+The project should prioritize:
+
+* Stable technologies over trendy technologies.
+* Minimal dependencies.
+* Clear separation of responsibilities.
+* Easy maintenance.
+* Long-term reliability.
+
+Technology changes should only happen when there is a clear measurable benefit.
+
+```
+```
+# 16. Testing & Experimentation Framework
+
+## 16.1 Testing Philosophy
+
+Octopus Hunter development follows a data-driven testing approach.
+
+No strategy modification should be accepted based only on observation or short-term results.
+
+Every important change must be:
+
+* Defined.
+* Versioned.
+* Tested.
+* Measured.
+* Reviewed.
+
+---
+
+# 16.2 Experiment Lifecycle
+
+Every experiment follows this process:
+
+```text
+Idea
+
+↓
+
+Hypothesis
+
+↓
+
+Architecture Review
+
+↓
+
+Implementation
+
+↓
+
+Strategy Version Created
+
+↓
+
+Forward Testing
+
+↓
+
+Performance Analysis
+
+↓
+
+Decision
+```
+
+---
+
+# 16.3 Experiment Definition
+
+Before implementing a change, the following must be documented:
+
+## Experiment ID
+
+Unique identifier.
+
+Example:
+
+```text
+EXP-001
+```
+
+---
+
+## Objective
+
+What problem is being solved?
+
+Example:
+
+"Reduce false signals during low volatility periods."
+
+---
+
+## Hypothesis
+
+Expected result.
+
+Example:
+
+"Adding BBW filtering will reduce bad entries without significantly reducing profitable signals."
+
+---
+
+## Expected Impact
+
+The expected improvement must be defined.
+
+Possible goals:
+
+* Higher win rate.
+* Better profit factor.
+* Lower drawdown.
+* Better signal quality.
+* Improved stability.
+
+---
+
+# 16.4 Testing Metrics
+
+Every strategy version should be evaluated using measurable metrics.
+
+Important metrics include:
+
+## Trading Performance
+
+* Total trades.
+* Winning trades.
+* Losing trades.
+* Win rate.
+* Profit factor.
+* Net profit.
+* Maximum drawdown.
+
+---
+
+## Signal Quality
+
+* Number of signals.
+* Signal accuracy.
+* False signals.
+* Missed opportunities.
+* Average confidence.
+
+---
+
+## Risk Metrics
+
+* Stop Loss frequency.
+* Take Profit frequency.
+* Average reward/risk ratio.
+* Maximum losing streak.
+
+---
+
+# 16.5 Strategy Version Testing
+
+Every meaningful modification receives a version identifier.
+
+Examples:
+
+```text
+v1.0 Baseline
+
+v1.1 RSI Filter
+
+v1.2 BBW Filter
+
+v1.3 Combined Filters
+```
+
+Each version must be compared against the previous baseline.
+
+---
+
+# 16.6 Testing Rules
+
+A strategy change should not be accepted if:
+
+* Testing period is too short.
+* Trade sample size is too small.
+* Results cannot be compared.
+* The improvement cannot be measured.
+
+---
+
+# 16.7 Forward Testing
+
+Forward testing is required because live market behavior may differ from historical assumptions.
+
+Forward testing should evaluate:
+
+* Real execution.
+* Real spreads.
+* Real signal timing.
+* Real market conditions.
+
+---
+
+# 16.8 Experiment Decision
+
+Every experiment receives one final status:
+
+## Accepted
+
+The change provides measurable improvement and can become part of the strategy.
+
+---
+
+## Needs Revision
+
+The idea has potential but requires modification or additional testing.
+
+---
+
+## Rejected
+
+The change does not provide sufficient improvement or introduces unnecessary complexity.
+
+---
+
+# 16.9 Testing Documentation
+
+Results should be stored in:
+
+```text
+TEST_RESULTS.md
+```
+
+Each record should include:
+
+* Experiment ID.
+* Strategy version.
+* Date.
+* Configuration.
+* Test duration.
+* Results.
+* Conclusion.
+
+---
+
+# 16.10 Research Principle
+
+The goal is not to create the most complicated strategy.
+
+The goal is to create the most reliable strategy supported by evidence.
+
+```
+```
+# 17. AI Collaboration Rules & Future Development Guidelines
+
+## 17.1 AI Role
+
+Any AI working on Octopus Hunter should act as:
+
+* Technical Architect.
+* Code Reviewer.
+* Development Assistant.
+* Strategy Analyst.
+* Project Management Support.
+
+The AI should help improve the product, not simply provide answers.
+
+---
+
+# 17.2 Core AI Rules
+
+Every AI must follow these principles:
+
+## Understand Before Changing
+
+Before suggesting modifications:
+
+* Understand the existing architecture.
+* Review related files.
+* Identify dependencies.
+* Confirm the purpose of the change.
+
+Never modify a component without understanding its role.
+
+---
+
+## Never Assume Missing Information
+
+If important information is unavailable:
+
+Ask questions first.
+
+Do not invent:
+
+* File structures.
+* Database fields.
+* Existing features.
+* Strategy behavior.
+
+---
+
+## Architecture Before Code
+
+Every feature follows:
+
+```text id="48u6xm"
+Idea
+
+↓
+
+Analysis
+
+↓
+
+Architecture Decision
+
+↓
+
+Implementation Plan
+
+↓
+
+Code
+
+↓
+
+Review
+
+↓
+
+Testing
+
+↓
+
+Approval
+```
+
+---
+
+# 17.3 AI Team Responsibilities
+
+## ChatGPT
+
+Primary role:
+
+* CTO guidance.
+* Architecture decisions.
+* Documentation.
+* Strategy evaluation.
+* Code review.
+
+---
+
+## GitHub Copilot
+
+Primary role:
+
+* Code completion.
+* Implementation assistance.
+* Local refactoring.
+
+Copilot output must still be reviewed.
+
+---
+
+## Claude
+
+Primary role:
+
+* Large code analysis.
+* Debugging support.
+* Alternative solutions.
+
+---
+
+## Gemini
+
+Primary role:
+
+* Independent review.
+* Research assistance.
+* Additional analysis.
+
+---
+
+# 17.4 Feature Evaluation Rules
+
+Before accepting any new feature, evaluate:
+
+## Business Value
+
+Does it improve:
+
+* Profitability?
+* Reliability?
+* User experience?
+* Commercial potential?
+
+---
+
+## Technical Value
+
+Does it improve:
+
+* Maintainability?
+* Performance?
+* Scalability?
+* Security?
+
+---
+
+## Complexity Cost
+
+Does the benefit justify:
+
+* Additional code?
+* Additional dependencies?
+* Additional maintenance?
+
+---
+
+# 17.5 Code Review Rules
+
+Before merging code:
+
+Verify:
+
+* Correct architecture placement.
+* No duplicated logic.
+* No unnecessary complexity.
+* Clear naming.
+* Error handling.
+* Testing completed.
+
+---
+
+# 17.6 Strategy Modification Rules
+
+Trading strategy changes require extra discipline.
+
+Every change must include:
+
+* Reason for change.
+* Expected improvement.
+* Strategy version.
+* Testing plan.
+* Performance comparison.
+
+No strategy change should become permanent without evidence.
+
+---
+
+# 17.7 Documentation Rules
+
+Every important modification should update:
+
+* CHANGELOG.md
+* BUGS.md (if fixing an issue)
+* TEST_RESULTS.md (if testing was performed)
+* Relevant architecture documents
+
+Documentation is part of development, not an optional task.
+
+---
+
+# 17.8 Development Priorities
+
+The project priorities are:
+
+1. Reliability.
+2. Data accuracy.
+3. Strategy validation.
+4. Maintainability.
+5. User experience.
+6. Commercial features.
+
+Short-term gains should not damage long-term stability.
+
+---
+
+# 17.9 Final Development Principle
+
+Octopus Hunter is developed as a professional software product.
+
+The objective is not:
+
+"Add more features."
+
+The objective is:
+
+"Build the most reliable and maintainable trading system possible through disciplined engineering and evidence-based improvement."
+
+```
+```
+---
+
+# Document Control
+
+Version:
+1.0.0
+
+Status:
+Internal Documentation Baseline
+
+Document Owner:
+Octopus Hunter Project
+
+Review Status:
+Approved Baseline
+
+Last Updated:
+2026-07-22
