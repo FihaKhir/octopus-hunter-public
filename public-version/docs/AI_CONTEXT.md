@@ -1571,3 +1571,226 @@ API changes must preserve existing architecture.
 
 ```
 ```
+# 13. Trading Strategy Overview
+
+## 13.1 Strategy Concept
+
+Octopus Hunter is a spike-detection trading system designed specifically for instruments that exhibit repeated price movement patterns.
+
+The strategy does not attempt to predict traditional market direction.
+
+Instead, it analyzes the behavior of the instrument itself and searches for statistical opportunities based on previous movement characteristics.
+
+---
+
+# 13.2 Trading Philosophy
+
+The strategy is based on the idea that certain instruments create recurring movement patterns.
+
+The EA studies:
+
+* Time between movements.
+* Price displacement.
+* Movement intensity.
+* Market compression.
+* Momentum conditions.
+* Historical behavior.
+
+The objective is to identify moments where the probability of a significant movement increases.
+
+---
+
+# 13.3 Instrument Classification
+
+Octopus Hunter analyzes instruments using movement families.
+
+Current families include:
+
+```text
+GainX
+PainX
+SwitchX
+BreakX
+TrendX
+```
+
+These families represent different behavioral patterns.
+
+Each instrument has characteristics such as:
+
+* Expected movement size.
+* Average distance between events.
+* Typical volatility behavior.
+
+---
+
+# 13.4 Signal Generation Overview
+
+The signal process follows this general flow:
+
+```text
+Market Tick Data
+
+↓
+
+Movement Tracking
+
+↓
+
+Pattern Analysis
+
+↓
+
+Condition Evaluation
+
+↓
+
+Confidence Calculation
+
+↓
+
+Signal Decision
+
+↓
+
+Risk Calculation
+
+↓
+
+Signal Transmission
+```
+
+---
+
+# 13.5 Core Analysis Components
+
+The strategy evaluates multiple factors.
+
+## Movement Analysis
+
+The EA tracks:
+
+* Price movement.
+* Tick behavior.
+* Distance between significant movements.
+* Current position relative to expected behavior.
+
+---
+
+## Volatility Analysis
+
+The strategy evaluates market conditions using volatility measurements.
+
+Purpose:
+
+* Detect suitable environments.
+* Avoid poor trading conditions.
+* Improve signal quality.
+
+---
+
+## Momentum Analysis
+
+Momentum indicators are used as additional confirmation layers.
+
+Examples:
+
+* RSI.
+* Other optional indicators.
+
+Their role is filtering and confirmation, not primary signal generation.
+
+---
+
+## Compression Analysis
+
+Compression measures whether the market is becoming more concentrated before a possible movement.
+
+The objective:
+
+Identify periods where movement potential may increase.
+
+---
+
+# 13.6 Confidence System
+
+Each potential signal receives a confidence evaluation.
+
+Confidence is influenced by multiple factors including:
+
+* Pattern quality.
+* Timing conditions.
+* Market state.
+* Confirmation indicators.
+
+The confidence score helps determine whether a setup is strong enough to become an official signal.
+
+---
+
+# 13.7 Risk Management Overview
+
+Risk management is separated from signal generation.
+
+The strategy manages:
+
+* Entry point.
+* Stop Loss.
+* Take Profit.
+* Trade monitoring.
+
+The objective is to balance:
+
+* Signal accuracy.
+* Risk exposure.
+* Reward potential.
+
+---
+
+# 13.8 Strategy Versioning
+
+Every meaningful strategy modification must create a new version.
+
+Examples:
+
+```text
+v1.0 Baseline
+
+v1.1 RSI Filter
+
+v1.2 BBW Filter
+
+v1.3 Risk Adjustment
+```
+
+This allows objective comparison between versions.
+
+---
+
+# 13.9 Strategy Development Rules
+
+Any strategy modification must:
+
+1. Have a clear hypothesis.
+
+2. Have measurable expected improvement.
+
+3. Be tested against the current baseline.
+
+4. Record results.
+
+5. Be accepted, revised, or rejected.
+
+---
+
+# 13.10 Strategy Limitations
+
+Current strategy development requires continuous testing.
+
+No indicator, filter, or parameter should be considered beneficial without statistical validation.
+
+The goal is not to create more signals.
+
+The goal is to create better signals.
+
+```
+```
