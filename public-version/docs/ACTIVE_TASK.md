@@ -1,22 +1,35 @@
 # Active Task
 
-Current Sprint:
+## Sprint
+
 Analytics Pipeline
 
-Current Task:
-Store EA analytics in trade_history.
+## Current Task
 
-Status:
-In Progress
+Complete the analytics pipeline.
 
-Files:
+Current progress:
+
+- ✅ MT5 EA sends analytics
+- ✅ API accepts analytics
+- ✅ SQL migration created
+- ⬜ Run SQL migration in Supabase
+- ⬜ Dashboard displays analytics
+
+## Files
 
 api/signal.js
 
 migrations/001_add_trade_resolution_fields.sql
 
-Next Step:
-Run SQL migration in Supabase.
+## Status
 
-Blocked By:
+In Progress
+
+## Next Step
+
+Apply the SQL migration to Supabase, then update the dashboard.
+
+## Blockers
+
 None
