@@ -22,15 +22,13 @@ export default async function handler(req, res) {
 
   const adminSecret = req.query.admin_secret;
 
-const { data, error } = await supabase
-  .from('trade_history')
-  .select('*')
-  .limit(1);
-
+// TEMPORARY DIAGNOSTIC: Replace validation with diagnostic response
 return res.status(200).json({
-  auth: true,
-  error,
-  rows: data
+  received: adminSecret,
+  received_length: adminSecret ? adminSecret.length : 0,
+  env_exists: !!process.env.ADMIN_SECRET,
+  env_length: process.env.ADMIN_SECRET ? process.env.ADMIN_SECRET.length : 0,
+  matches: adminSecret === process.env.ADMIN_SECRET
 });
 
   // Supabase's REST layer (PostgREST) silently caps every single request at
