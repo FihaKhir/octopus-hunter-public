@@ -108,7 +108,7 @@
   </div>
 
   <div class="panel">
-    <div style="font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--muted); margin-bottom:14px;" id="versionCompareHeading" data-i18n="versionCompareHeading">Strategy version comparison (respects Family/Symbol/Outcome/Time filters, ignores the Strategy version dropdown itself)</div>
+    <div style="font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--muted); margin-bottom:14px;" id="versionCompareHeading" data-i18n="versionCompareHeading">Strategy version compa[...]
     <div class="table-scroll">
       <table>
         <thead>
@@ -168,6 +168,8 @@
             <th data-i18n="detailColEntry">Entry</th><th data-i18n="detailColSL">SL</th><th data-i18n="detailColTP">TP</th>
             <th data-i18n="detailColOutcome">Outcome</th>
             <th data-i18n="detailColVersion">Version</th><th data-i18n="detailColOpened">Opened</th><th data-i18n="detailColClosed">Closed</th>
+            <th data-i18n="detailColDuration">Trade Duration</th><th data-i18n="detailColMFE">MFE</th><th data-i18n="detailColMAE">MAE</th>
+            <th data-i18n="detailColSession">Session</th><th data-i18n="detailColWeekday">Weekday</th>
           </tr>
         </thead>
         <tbody id="historyTableBody"></tbody>
@@ -220,6 +222,7 @@ const I18N = {
     detailColSymbol: 'Symbol', detailColFamily: 'Family', detailColSide: 'Side', detailColConfidence: 'Confidence',
     detailColEntry: 'Entry', detailColSL: 'SL', detailColTP: 'TP', detailColOutcome: 'Outcome',
     detailColVersion: 'Version', detailColOpened: 'Opened', detailColClosed: 'Closed',
+    detailColDuration: 'Duration', detailColMFE: 'MFE', detailColMAE: 'MAE', detailColSession: 'Session', detailColWeekday: 'Weekday',
     noHistoryYet: 'No trade history yet — it fills in as signals fire and resolve.',
     statTotalSignals: 'Total signals', statWins: 'Wins', statLosses: 'Losses',
     statStillOpen: 'Still open', statInvalidated: 'Invalidated', statWinRate: 'Win rate',
@@ -253,6 +256,7 @@ const I18N = {
     detailColSymbol: 'الرمز', detailColFamily: 'العائلة', detailColSide: 'الاتجاه', detailColConfidence: 'مستوى الثقة',
     detailColEntry: 'الدخول', detailColSL: 'وقف الخسارة', detailColTP: 'جني الأرباح', detailColOutcome: 'النتيجة',
     detailColVersion: 'الإصدار', detailColOpened: 'وقت الفتح', detailColClosed: 'وقت الإغلاق',
+    detailColDuration: 'مدة التداول', detailColMFE: 'MFE', detailColMAE: 'MAE', detailColSession: 'جلسة التداول', detailColWeekday: 'يوم الأسبوع',
     noHistoryYet: 'لا يوجد سجل صفقات بعد — سيُملأ تلقائياً مع صدور الإشارات وتحققها.',
     statTotalSignals: 'إجمالي الإشارات', statWins: 'الأرباح', statLosses: 'الخسائر',
     statStillOpen: 'لا تزال مفتوحة', statInvalidated: 'ملغاة', statWinRate: 'معدل الربح',
@@ -260,7 +264,7 @@ const I18N = {
     noDataYet: 'لا توجد بيانات بعد.',
     sideBuy: 'شراء', sideSell: 'بيع',
     badgeWin: 'ربح', badgeLoss: 'خسارة', badgeOpen: 'مفتوحة', badgeInvalidated: 'ملغاة',
-    truncationWarning: 'يحتوي هذا النطاق على بيانات أكثر مما يمكن تحميله بأمان دفعة واحدة — الأرقام أدناه جزء من البيانات وليست الإجمالي الكامل. اختر نطاقاً زمنياً أضيق للحصول على أرقام دقيقة.'
+    truncationWarning: 'يحتوي هذا النطاق على بيانات أكثر مما يمكن تحميله بأمان دفعة واحدة — الأرقام أدناه جزء من البيانات، وليست الإجمالي الكامل. اختر نطاقاً زمنياً أضيق للحصول على أرقام دقيقة.'
   }
 };
 
@@ -315,6 +319,24 @@ function fmtPrice(v){
 function fmtTime(unixSeconds){
   if(!unixSeconds) return '—';
   return new Date(unixSeconds * 1000).toLocaleString();
+}
+
+// Format duration in seconds to human-readable format (e.g., "1h 23m 45s")
+function fmtDuration(seconds){
+  if(seconds === null || seconds === undefined) return '—';
+  const s = Math.floor(seconds);
+  const hours = Math.floor(s / 3600);
+  const minutes = Math.floor((s % 3600) / 60);
+  const secs = s % 60;
+  if(hours > 0) return `${hours}h ${minutes}m`;
+  if(minutes > 0) return `${minutes}m ${secs}s`;
+  return `${secs}s`;
+}
+
+// Format percentage value (handles null, null-like values)
+function fmtPercent(v){
+  if(v === null || v === undefined) return '—';
+  return Number(v).toFixed(2) + '%';
 }
 
 async function loadHistory(){
@@ -578,6 +600,11 @@ function renderTable(rows){
       <td>${versionLabel(r)}</td>
       <td>${fmtTime(r.opened_at)}</td>
       <td>${fmtTime(r.closed_at)}</td>
+      <td>${fmtDuration(r.trade_duration_seconds)}</td>
+      <td>${fmtPercent(r.mfe)}</td>
+      <td>${fmtPercent(r.mae)}</td>
+      <td>${r.trading_session || '—'}</td>
+      <td>${r.trading_weekday || '—'}</td>
     </tr>
   `).join('');
 }
