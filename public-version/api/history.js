@@ -21,9 +21,15 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
 
   const adminSecret = req.query.admin_secret;
-  if (!adminSecret || adminSecret !== process.env.ADMIN_SECRET) {
-    return res.status(401).json({ error: 'unauthorized' });
-  }
+
+  // TEMPORARY DIAGNOSTIC: Replace validation with diagnostic response
+  return res.status(200).json({
+    received: adminSecret,
+    received_length: adminSecret ? adminSecret.length : 0,
+    env_exists: !!process.env.ADMIN_SECRET,
+    env_length: process.env.ADMIN_SECRET ? process.env.ADMIN_SECRET.length : 0,
+    matches: adminSecret === process.env.ADMIN_SECRET
+  });
 
   // Supabase's REST layer (PostgREST) silently caps every single request at
   // its configured "Max Rows" (default 1000), regardless of any .limit()
