@@ -22,14 +22,16 @@ export default async function handler(req, res) {
 
   const adminSecret = req.query.admin_secret;
 
-  // TEMPORARY DIAGNOSTIC: Replace validation with diagnostic response
-  return res.status(200).json({
-    received: adminSecret,
-    received_length: adminSecret ? adminSecret.length : 0,
-    env_exists: !!process.env.ADMIN_SECRET,
-    env_length: process.env.ADMIN_SECRET ? process.env.ADMIN_SECRET.length : 0,
-    matches: adminSecret === process.env.ADMIN_SECRET
-  });
+const { data, error } = await supabase
+  .from('trade_history')
+  .select('*')
+  .limit(1);
+
+return res.status(200).json({
+  auth: true,
+  error,
+  rows: data
+});
 
   // Supabase's REST layer (PostgREST) silently caps every single request at
   // its configured "Max Rows" (default 1000), regardless of any .limit()
