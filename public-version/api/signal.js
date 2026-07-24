@@ -21,7 +21,8 @@ export default async function handler(req, res) {
       atr_value, baseline_atr_value, entry_price, sl_price, tp_price,
       ticks_since_jump, expected_gap_ticks, family_score, sl_proximity,
       timeframe, status, hit_time, bar_time, sent_at,
-      bbw_score, rsi_value, strategy_version
+      bbw_score, rsi_value, strategy_version,
+      trade_duration_seconds, mfe, mae, trading_session, trading_weekday
     } = req.body;
 
     if (!symbol) {
@@ -142,12 +143,22 @@ export default async function handler(req, res) {
         if (findError) {
           console.error(`[${symbol}] trade_history lookup error:`, findError);
         } else if (openRow) {
+          // Build the update object with resolution fields plus optional diagnostic fields
+          const updateObject = {
+            outcome: status === 'tp_hit' ? 'win' : 'loss',
+            closed_at: hit_time
+          };
+
+          // Add optional fields if they were provided in the request
+          if (trade_duration_seconds !== undefined) updateObject.trade_duration_seconds = trade_duration_seconds;
+          if (mfe !== undefined) updateObject.mfe = mfe;
+          if (mae !== undefined) updateObject.mae = mae;
+          if (trading_session !== undefined) updateObject.trading_session = trading_session;
+          if (trading_weekday !== undefined) updateObject.trading_weekday = trading_weekday;
+
           const { error: updateError } = await supabase
             .from('trade_history')
-            .update({
-              outcome: status === 'tp_hit' ? 'win' : 'loss',
-              closed_at: hit_time
-            })
+            .update(updateObject)
             .eq('id', openRow.id);
           if (updateError) {
             console.error(`[${symbol}] trade_history resolution update FAILED:`, updateError);
