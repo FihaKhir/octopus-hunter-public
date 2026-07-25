@@ -135,7 +135,6 @@ VERSION.md
 ---
 
 # Current Blocker
-
 None.
 
 Development can resume.
