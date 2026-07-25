@@ -98,12 +98,15 @@
 
   <div class="panel">
     <div style="font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--muted); margin-bottom:10px;" id="timeRangeHeading" data-i18n="timeRangeHeading">Time range</div>
-    <div class="filters" style="margin-bottom:0;" id="timeRangeButtons">
-      <button class="secondary time-range-btn active" data-hours="" data-i18n="timeAll" onclick="setTimeRange(null, this)">All time</button>
-      <button class="secondary time-range-btn" data-hours="1" data-i18n="time1h" onclick="setTimeRange(1, this)">Last 1h</button>
-      <button class="secondary time-range-btn" data-hours="4" data-i18n="time4h" onclick="setTimeRange(4, this)">Last 4h</button>
-      <button class="secondary time-range-btn" data-hours="12" data-i18n="time12h" onclick="setTimeRange(12, this)">Last 12h</button>
-      <button class="secondary time-range-btn" data-hours="24" data-i18n="time24h" onclick="setTimeRange(24, this)">Last 24h</button>
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+      <div class="filters" style="margin-bottom:0;" id="timeRangeButtons">
+        <button class="secondary time-range-btn active" data-hours="" data-i18n="timeAll" onclick="setTimeRange(null, this)">All time</button>
+        <button class="secondary time-range-btn" data-hours="1" data-i18n="time1h" onclick="setTimeRange(1, this)">Last 1h</button>
+        <button class="secondary time-range-btn" data-hours="4" data-i18n="time4h" onclick="setTimeRange(4, this)">Last 4h</button>
+        <button class="secondary time-range-btn" data-hours="12" data-i18n="time12h" onclick="setTimeRange(12, this)">Last 12h</button>
+        <button class="secondary time-range-btn" data-hours="24" data-i18n="time24h" onclick="setTimeRange(24, this)">Last 24h</button>
+      </div>
+      <button class="secondary" onclick="exportCSV()" id="exportCsvBtn" data-i18n="exportCsvBtn">📊 Export CSV</button>
     </div>
   </div>
 
@@ -214,6 +217,7 @@ const I18N = {
     refreshBtn: 'Refresh',
     timeRangeHeading: 'Time range',
     timeAll: 'All time', time1h: 'Last 1h', time4h: 'Last 4h', time12h: 'Last 12h', time24h: 'Last 24h',
+    exportCsvBtn: '📊 Export CSV',
     versionCompareHeading: 'Strategy version comparison (respects Family/Symbol/Outcome/Time filters, ignores the Strategy version dropdown itself)',
     colVersion: 'Version', colTotal: 'Total', colWins: 'Wins', colLosses: 'Losses',
     colStillOpen: 'Still open', colInvalidated: 'Invalidated', colWinRate: 'Win rate',
@@ -248,6 +252,7 @@ const I18N = {
     refreshBtn: 'تحديث',
     timeRangeHeading: 'النطاق الزمني',
     timeAll: 'كل الوقت', time1h: 'آخر ساعة', time4h: 'آخر 4 ساعات', time12h: 'آخر 12 ساعة', time24h: 'آخر 24 ساعة',
+    exportCsvBtn: '📊 تصدير CSV',
     versionCompareHeading: 'مقارنة إصدارات الاستراتيجية (تراعي فلاتر العائلة/الرمز/النتيجة/الوقت، وتتجاهل قائمة إصدار الاستراتيجية نفسها)',
     colVersion: 'الإصدار', colTotal: 'الإجمالي', colWins: 'الأرباح', colLosses: 'الخسائر',
     colStillOpen: 'لا تزال مفتوحة', colInvalidated: 'ملغاة', colWinRate: 'معدل الربح',
@@ -610,6 +615,65 @@ function renderTable(rows){
       <td>${r.trading_weekday || '—'}</td>
     </tr>
   `).join('');
+}
+
+// --- CSV export ----------------------------------------------------------
+// Exports exactly what's currently on screen: filteredRows() is the same
+// data source renderTable() uses, so this always respects the Family/
+// Symbol/Outcome/Strategy-version filters AND the active time range.
+// Client-side only — no backend call, no new API.
+function csvEscape(value){
+  const s = (value === null || value === undefined) ? '' : String(value);
+  if(/[",\r\n]/.test(s)){
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
+function exportCSV(){
+  const rows = filteredRows();
+  const headers = ['Symbol','Family','Side','Confidence','Entry','SL','TP','Outcome','Version','Opened','Closed','Duration','MFE','MAE','Session','Weekday'];
+
+  const lines = [headers.map(csvEscape).join(',')];
+
+  rows.forEach(r => {
+    const side = r.direction === 'up' ? 'BUY' : (r.direction === 'down' ? 'SELL' : '');
+    const cells = [
+      r.symbol || '',
+      r.family || '',
+      side,
+      (r.confidence !== null && r.confidence !== undefined) ? r.confidence.toFixed(1) + '%' : '',
+      (r.entry_price !== null && r.entry_price !== undefined) ? fmtPrice(r.entry_price) : '',
+      (r.sl_price !== null && r.sl_price !== undefined) ? fmtPrice(r.sl_price) : '',
+      (r.tp_price !== null && r.tp_price !== undefined) ? fmtPrice(r.tp_price) : '',
+      r.outcome ? r.outcome.toUpperCase() : '',
+      versionLabel(r),
+      r.opened_at ? fmtTime(r.opened_at) : '',
+      r.closed_at ? fmtTime(r.closed_at) : '',
+      (r.trade_duration_seconds !== null && r.trade_duration_seconds !== undefined) ? fmtDuration(r.trade_duration_seconds) : '',
+      (r.mfe !== null && r.mfe !== undefined) ? fmtPercent(r.mfe) : '',
+      (r.mae !== null && r.mae !== undefined) ? fmtPercent(r.mae) : '',
+      r.trading_session || '',
+      (r.trading_weekday !== null && r.trading_weekday !== undefined) ? r.trading_weekday : ''
+    ];
+    lines.push(cells.map(csvEscape).join(','));
+  });
+
+  const csvContent = lines.join('\r\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const filename = `octopus_hunter_dataset_${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}.csv`;
+
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 if(adminSecret){
