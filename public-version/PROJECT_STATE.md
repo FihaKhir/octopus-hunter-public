@@ -136,17 +136,9 @@ VERSION.md
 
 # Current Blocker
 
-History page authentication.
+None.
 
-History always returns:
-
-401 Unauthorized
-
-Admin and Lab work.
-
-History password does not.
-
-Investigation in progress.
+Development can resume.
 
 ---
 
