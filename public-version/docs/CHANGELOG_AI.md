@@ -42,3 +42,11 @@ Approved
 Run the SQL migration in Supabase.
 
 ---
+## 2026-07-24
+
+### Fixed
+- Resolved History page access issue.
+- Root cause was not authentication.
+- Fixed missing closing brace in `loadHistory()`.
+- Fixed corrupted HTML in the Strategy Version Comparison section (`versionCompareHeading`).
+- Verified ADMIN_SECRET authentication, Supabase connectivity, and history API were functioning correctly.
