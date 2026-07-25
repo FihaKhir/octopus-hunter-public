@@ -2,7 +2,7 @@
 
 ## Project Version
 
-Current Version: 3.0.0-dev
+Current Version: 3.0.1-dev
 
 Status: Development
 
@@ -57,6 +57,7 @@ Static HTML
 - Free-tier services only.
 - Preserve backward compatibility.
 - Never change trading logic unless explicitly approved.
+- Fixed History page authentication blocker (root cause: JavaScript syntax + corrupted HTML).
 
 ---
 
