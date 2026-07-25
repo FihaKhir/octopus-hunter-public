@@ -6,59 +6,8 @@ Last Updated: 2026-07-24
 
 ==================================================
 
+
 ISSUE 001
-
-Title
-
-History Authentication
-
-Status
-
-OPEN
-
-Priority
-
-CRITICAL
-
-Symptoms
-
-History page requests ADMIN_SECRET.
-
-Correct password entered.
-
-Returns:
-
-401 Unauthorized
-
-Observed
-
-Admin page works.
-
-Lab page works.
-
-History page fails.
-
-Current Understanding
-
-history.html correctly stores the password.
-
-history.html correctly calls:
-
-/api/history
-
-The password is removed from localStorage after the API returns 401.
-
-Root Cause
-
-UNKNOWN
-
-Next Investigation
-
-Verify the deployed history.js is reading the correct environment variable.
-
---------------------------------------------------
-
-ISSUE 002
 
 Title
 
@@ -106,7 +55,7 @@ History Dashboard
 
 --------------------------------------------------
 
-ISSUE 003
+ISSUE 002
 
 Title
 
