@@ -361,8 +361,8 @@ async function loadHistory(){
     renderAll();
     return true;
   }catch(e){
+    console.error("loadHistory failed:", e);
     return false;
-  }
 }
 
 function showTruncationWarning(truncated){
