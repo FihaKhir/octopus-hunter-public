@@ -2,30 +2,30 @@
 
 ## Project Version
 
-Current Version: 3.0.1-dev
+Current Version: 3.1.0-dev
 
-Status: Development
+Status: Research & Forward Testing
 
-Current Sprint: Analytics Pipeline
+Current Sprint: Strategy Optimization
 
 Current Task:
-Store EA analytics from MT5 → API → Database → Dashboard.
+Evaluate strategy variants using forward-tested datasets and identify the highest-performing configuration before implementing adaptive improvements.
 
 ---
 
 ## Components
 
 EA Version:
-3.0-dev
+3.1-dev
 
 Dashboard Version:
-2.0
+2.1
 
 Database Schema:
 v2
 
 API Version:
-2.0
+2.1
 
 ---
 
@@ -45,10 +45,52 @@ Database:
 Supabase PostgreSQL
 
 Backend:
-Supabase Edge Functions
+Vercel Serverless API + Supabase
 
 Frontend:
 Static HTML
+
+---
+
+## Current Stable Strategy
+
+Baseline:
+v1_baseline_baselineSL_reentryguard
+
+Completed Experiments:
+
+- v1_baseline_baselineSL_reentryguard
+- v1_baseline_baselineSL_rsi_reentryguard
+- v1_baseline_baselineSL_bbw_reentryguard
+
+---
+
+## Forward Test Results
+
+Baseline
+- 230 signals
+- 28.9% win rate
+
+RSI
+- 222 signals
+- 41.2% win rate
+
+BBW
+- 244 signals
+- 43.7% win rate
+
+Current Best Performer:
+Baseline + BBW
+
+---
+
+## Next Planned Experiment
+
+Version:
+v1_baseline_baselineSL_rsi_bbw_reentryguard
+
+Goal:
+Enable both RSI and BBW simultaneously while keeping every other parameter identical to determine whether both filters complement each other or interfere with each other.
 
 ---
 
@@ -57,10 +99,32 @@ Static HTML
 - Free-tier services only.
 - Preserve backward compatibility.
 - Never change trading logic unless explicitly approved.
-- Fixed History page authentication blocker (root cause: JavaScript syntax + corrupted HTML).
+- One strategy change per experiment.
+- Every experiment must be forward tested before drawing conclusions.
+
+---
+
+## Major Milestones
+
+✅ MT5 Expert Advisor
+
+✅ Public Dashboard
+
+✅ Admin Panel
+
+✅ History Page
+
+✅ Lab Analytics
+
+✅ CSV Export
+
+✅ Strategy Version Tracking
+
+✅ Project Backup System
+
+✅ First Controlled Strategy Comparison (Baseline vs RSI vs BBW)
 
 ---
 
 Last Updated:
-2026-07-24
-
+2026-07-25
