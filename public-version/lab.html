@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Octopus Hunter — Strategy Lab</title>
+<title>Octopus Hunter — Trading Research Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -12,8 +12,69 @@
     --muted:#6b7280; --up:#35c77e; --down:#e5484d; --gold:#d4a72c; --accent:#2ea8a8;
   }
   *{box-sizing:border-box; margin:0; padding:0;}
-  body{ background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; padding:24px 16px 60px; }
-  .wrap{ max-width:1200px; margin:0 auto; }
+  body{ background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; padding-top:140px; }
+  
+  #lockScreen{ max-width:340px; margin:80px auto; text-align:center; }
+  #lockScreen h1{ font-family:'IBM Plex Mono',monospace; font-size:20px; }
+  
+  .sticky-header{
+    position:fixed; top:0; left:0; right:0; z-index:1000; background:var(--bg);
+    border-bottom:1px solid var(--border);
+  }
+
+  .status-strip{
+    display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    gap:20px; padding:12px 24px; border-bottom:1px solid var(--border);
+    font-size:11px; color:var(--muted); font-family:'IBM Plex Mono',monospace;
+  }
+  .status-item{ display:flex; align-items:center; gap:6px; white-space:nowrap; }
+  .status-item b{ color:var(--text); }
+  .status-badge{ display:inline-block; padding:2px 8px; background:rgba(46,168,168,0.15); border:1px solid var(--accent); border-radius:3px; font-size:10px; }
+  .status-badge.active{ background:rgba(53,199,126,0.15); border-color:var(--up); }
+  .status-badge.inactive{ background:rgba(229,72,77,0.15); border-color:var(--down); }
+
+  .quick-actions{
+    display:flex; gap:8px;
+  }
+  .quick-btn{
+    background:var(--panel); border:1px solid var(--border); color:var(--text);
+    font-family:'IBM Plex Mono',monospace; font-size:11px; padding:6px 10px;
+    border-radius:4px; cursor:pointer; transition:all 0.2s;
+  }
+  .quick-btn:hover{ border-color:var(--accent); }
+
+  .nav-bar{
+    display:flex; align-items:center; gap:8px; padding:12px 24px; overflow-x:auto;
+    scroll-behavior:smooth;
+  }
+  .nav-tab{
+    background:transparent; border:none; color:var(--muted);
+    font-family:'IBM Plex Mono',monospace; font-size:12px; padding:8px 14px;
+    cursor:pointer; white-space:nowrap; transition:all 0.3s; border-bottom:2px solid transparent;
+    position:relative;
+  }
+  .nav-tab:hover{ color:var(--text); }
+  .nav-tab.active{
+    color:var(--accent); border-bottom-color:var(--accent);
+  }
+  .nav-badge{
+    display:inline-block; font-size:10px; margin-left:4px; color:var(--muted);
+  }
+  .nav-tab.active .nav-badge{ color:var(--accent); }
+
+  .tab-container{
+    display:none;
+    animation: fadeIn 0.3s ease-in-out;
+  }
+  .tab-container.active{
+    display:block;
+  }
+  @keyframes fadeIn{
+    from{ opacity:0; }
+    to{ opacity:1; }
+  }
+
+  .wrap{ max-width:1200px; margin:0 auto; padding:24px 16px 60px; }
   .page-head{ display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:24px; }
   h1{ font-family:'IBM Plex Mono',monospace; font-size:20px; }
   h2{ font-family:'IBM Plex Mono',monospace; font-size:14px; color:var(--muted); margin-bottom:14px; font-weight:600; }
@@ -45,7 +106,6 @@
   .verdict-card .v-title{ font-family:'IBM Plex Mono',monospace; font-size:14px; font-weight:700; margin-bottom:6px; }
   .verdict-card .v-body{ font-size:13px; color:var(--text); line-height:1.6; }
   .verdict.adopt{ color:var(--up); } .verdict.reject{ color:var(--down); } .verdict.wait{ color:var(--gold); }
-  #lockScreen{ max-width:340px; margin:80px auto; text-align:center; }
   .error{ color:var(--down); font-size:13px; margin-top:10px; }
   .empty-note{ color:var(--muted); font-family:'IBM Plex Mono',monospace; font-size:13px; text-align:center; padding:30px 0; }
   .thresholds-note{ font-size:11px; color:var(--muted); margin-top:10px; line-height:1.6; }
@@ -56,6 +116,33 @@
   .subhead:first-of-type{ margin-top:0; }
   .profile-metrics span{ display:inline-block; margin:2px 12px 6px 0; font-size:12px; color:var(--muted); }
   .profile-metrics span b{ color:var(--text); }
+
+  .summary-grid{
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:14px; margin-bottom:20px;
+  }
+  .summary-card{
+    background:#0e1119; border:1px solid var(--border); border-radius:8px; padding:16px;
+  }
+  .summary-card .label{ font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:8px; }
+  .summary-card .value{ font-family:'IBM Plex Mono',monospace; font-size:18px; font-weight:700; color:var(--text); }
+  .summary-card .value.success{ color:var(--up); }
+  .summary-card .value.warning{ color:var(--gold); }
+  .summary-card .value.danger{ color:var(--down); }
+
+  @media(max-width:768px){
+    .status-strip{
+      font-size:10px; padding:10px 16px; gap:10px;
+    }
+    .nav-bar{
+      padding:10px 16px;
+    }
+    .nav-tab{
+      font-size:11px; padding:6px 10px;
+    }
+    .wrap{
+      padding:16px;
+    }
+  }
 </style>
 </head>
 <body>
@@ -68,75 +155,120 @@
   <div class="error" id="lockError"></div>
 </div>
 
-<div class="wrap" id="panelWrap" style="display:none;">
-  <div class="page-head">
-    <h1>🧪 Octopus Hunter — Strategy Lab</h1>
-    <div style="display:flex; gap:10px;">
-      <a class="nav-btn" href="/admin.html">⚙️ Admin</a>
-      <a class="nav-btn" href="/history.html">📊 Performance</a>
-    </div>
-  </div>
-
-  <div class="panel">
-    <div class="baseline-selector">
-      <div>
-        <label>Baseline version</label>
-        <select id="baselineSelect" onchange="renderAll()" style="min-width:320px;"></select>
+<div id="mainApp" style="display:none;">
+  <div class="sticky-header">
+    <div class="status-strip">
+      <div style="flex:1; display:flex; gap:20px; flex-wrap:wrap;">
+        <div class="status-item"><b>Public Version</b> <span id="publicVersionText">—</span></div>
+        <div class="status-item"><b>Current Branch</b> <span id="currentBranchText">Developer</span></div>
+        <div class="status-item"><b>Research Mode</b> <span class="status-badge active">ACTIVE</span></div>
+        <div class="status-item"><b>Dataset</b> <span id="datasetText">0 Signals</span></div>
+        <div class="status-item"><b>Last Refresh</b> <span id="lastRefreshText">—</span></div>
       </div>
-      <button class="secondary" onclick="loadData()">Refresh</button>
+      <div class="quick-actions">
+        <button class="quick-btn" onclick="loadData()">Refresh</button>
+        <button class="quick-btn" onclick="exportCSV()">Export CSV</button>
+        <button class="quick-btn" onclick="exportJSON()">Export JSON</button>
+        <button class="quick-btn" onclick="toggleAllExpanded()">Collapse All</button>
+      </div>
     </div>
-    <div class="thresholds-note" id="thresholdsNote"></div>
-  </div>
 
-  <div class="panel">
-    <h2 id="statsHeading">Full statistics by version</h2>
-    <div class="table-scroll">
-      <table id="statsTable"></table>
-    </div>
-  </div>
-
-  <div class="panel">
-    <h2>Win rate by family</h2>
-    <div class="table-scroll">
-      <table id="familyTable"></table>
-    </div>
-  </div>
-
-  <div class="panel">
-    <h2>Win rate by symbol</h2>
-    <div class="table-scroll">
-      <table id="symbolTable"></table>
+    <div class="nav-bar">
+      <button class="nav-tab active" onclick="switchTab('dashboard')">📊 Dashboard<span class="nav-badge"></span></button>
+      <button class="nav-tab" onclick="switchTab('statistics')">📈 Statistics<span class="nav-badge" id="badge-statistics">—</span></button>
+      <button class="nav-tab" onclick="switchTab('symbols')">🎯 Symbols<span class="nav-badge" id="badge-symbols">—</span></button>
+      <button class="nav-tab" onclick="switchTab('release')">🚀 Release<span class="nav-badge" id="badge-release">—</span></button>
+      <button class="nav-tab" onclick="switchTab('research')">🧪 Research<span class="nav-badge" id="badge-research">—</span></button>
+      <button class="nav-tab" onclick="switchTab('intelligence')">🧠 Intelligence<span class="nav-badge" id="badge-intelligence">—</span></button>
     </div>
   </div>
 
-  <div class="panel">
-    <h2>Verdict vs Baseline</h2>
-    <div id="verdictWrap"></div>
+  <!-- DASHBOARD TAB -->
+  <div id="dashboard" class="tab-container active">
+    <div class="wrap">
+      <div class="page-head">
+        <h1>🧪 Trading Research Dashboard</h1>
+      </div>
+
+      <div id="dashboardSummary" class="summary-grid"></div>
+
+      <div class="panel">
+        <div class="baseline-selector">
+          <div>
+            <label>Baseline version</label>
+            <select id="baselineSelect" onchange="renderAll()" style="min-width:320px;"></select>
+          </div>
+          <button class="secondary" onclick="loadData()">Refresh</button>
+        </div>
+        <div class="thresholds-note" id="thresholdsNote"></div>
+      </div>
+
+      <div id="verdictWrap"></div>
+    </div>
   </div>
 
-  <div class="panel">
-    <h2>Release Advisor</h2>
-    <div id="releaseAdvisorWrap"></div>
+  <!-- STATISTICS TAB -->
+  <div id="statistics" class="tab-container">
+    <div class="wrap">
+      <div class="panel">
+        <h2 id="statsHeading">Full statistics by version</h2>
+        <div class="table-scroll">
+          <table id="statsTable"></table>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <div class="panel">
-    <h2>Next Experiment</h2>
-    <div id="nextExperimentWrap"></div>
+  <!-- SYMBOLS TAB -->
+  <div id="symbols" class="tab-container">
+    <div class="wrap">
+      <div class="panel">
+        <h2>Win rate by symbol</h2>
+        <div class="table-scroll">
+          <table id="symbolTable"></table>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <div class="panel">
-    <h2>Market Intelligence Engine</h2>
-    <div class="subhead">Behaviour Profiles</div>
-    <div id="behaviorProfilesWrap"></div>
+  <!-- RELEASE TAB -->
+  <div id="release" class="tab-container">
+    <div class="wrap">
+      <div class="panel">
+        <h2>Release Advisor</h2>
+        <div id="releaseAdvisorWrap"></div>
+      </div>
+    </div>
+  </div>
 
-    <div class="subhead">Similar Symbols</div>
-    <div id="similarSymbolsWrap"></div>
+  <!-- RESEARCH TAB -->
+  <div id="research" class="tab-container">
+    <div class="wrap">
+      <div class="panel">
+        <h2>Next Experiment</h2>
+        <div id="nextExperimentWrap"></div>
+      </div>
+    </div>
+  </div>
 
-    <div class="subhead">Outliers</div>
-    <div id="outliersWrap"></div>
+  <!-- INTELLIGENCE TAB -->
+  <div id="intelligence" class="tab-container">
+    <div class="wrap">
+      <div class="panel">
+        <h2>Market Intelligence Engine</h2>
+        <div class="subhead">Behaviour Profiles</div>
+        <div id="behaviorProfilesWrap"></div>
 
-    <div class="subhead">Long-Term Recommendations</div>
-    <div id="longTermRecsWrap"></div>
+        <div class="subhead">Similar Symbols</div>
+        <div id="similarSymbolsWrap"></div>
+
+        <div class="subhead">Outliers</div>
+        <div id="outliersWrap"></div>
+
+        <div class="subhead">Long-Term Recommendations</div>
+        <div id="longTermRecsWrap"></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -144,25 +276,16 @@
 const ADMIN_KEY = 'octopusHunterAdminSecret';
 let adminSecret = localStorage.getItem(ADMIN_KEY);
 let allRows = [];
-let versionStats = {}; // version -> computed metrics object
+let versionStats = {};
 let selectedBaseline = null;
+let lastRefreshTime = null;
+let allSymbolProfiles = [];
 
-// --- Disclosed evaluation thresholds -------------------------------------
-// Stated openly rather than buried in logic, per "no assumptions, no
-// guessing" — these are the exact bars a version must clear to be called
-// an improvement, not a subjective judgment call made per-comparison.
-const MIN_RESOLVED_SAMPLE = 30;       // below this, no verdict is given at all
-const WIN_RATE_MEANINGFUL_DELTA = 3.0; // percentage points
-const EXPECTANCY_MEANINGFUL_DELTA_PCT = 10.0; // relative % change
-
-// --- Release Advisor thresholds (disclosed) --------------------------------
-// A version needs this weighted confidence score to be called release-ready.
+const MIN_RESOLVED_SAMPLE = 30;
+const WIN_RATE_MEANINGFUL_DELTA = 3.0;
+const EXPECTANCY_MEANINGFUL_DELTA_PCT = 10.0;
 const READY_THRESHOLD_PCT = 65;
-// A symbol needs at least this many resolved trades before it gets a
-// KEEP/DISABLE call at all — below this it's "insufficient data", never
-// silently lumped in with disabled symbols.
 const MIN_SYMBOL_SAMPLE = 40;
-// Minimum per-symbol win rate (with non-negative expectancy) to be kept enabled.
 const SYMBOL_KEEP_WIN_RATE = 45.0;
 
 const LEGACY_VERSION_LABEL = 'v0_legacy (pre-tracking)';
@@ -180,7 +303,7 @@ async function tryShowPanel(){
   const ok = await loadData();
   if(ok){
     document.getElementById('lockScreen').style.display = 'none';
-    document.getElementById('panelWrap').style.display = 'block';
+    document.getElementById('mainApp').style.display = 'block';
   } else {
     document.getElementById('lockError').textContent = 'Wrong password.';
     localStorage.removeItem(ADMIN_KEY);
@@ -194,8 +317,12 @@ async function loadData(){
     if(!res.ok) return false;
     const payload = await res.json();
     allRows = payload.rows;
+    lastRefreshTime = new Date();
     computeAllVersionStats();
+    allSymbolProfiles = computeAllSymbolProfiles();
     populateBaselineSelect();
+    updateBadges();
+    updateStatusStrip();
     renderAll();
     return true;
   }catch(e){
@@ -203,13 +330,6 @@ async function loadData(){
   }
 }
 
-// --- Metric computation ---------------------------------------------------
-// All price-distance metrics (profit/loss/expectancy/etc.) are expressed in
-// raw price points, NOT currency — this is a signal-only system with no
-// position sizing or lot size, so there is no account-currency P&L to
-// compute. Wins gain exactly |tp_price - entry_price| (that's what "hit TP"
-// means); losses cost exactly |entry_price - sl_price|. Both are
-// deterministic from the stored trade parameters, not estimates.
 function computeVersionStats(rows){
   const wins = rows.filter(r => r.outcome === 'win');
   const losses = rows.filter(r => r.outcome === 'loss');
@@ -264,7 +384,6 @@ function computeVersionStats(rows){
     profitFactor: (grossLoss > 0) ? grossProfit / grossLoss : null,
     spanHours,
     signalsPerHour: spanHours >= 0.1 ? rows.length / spanHours : null,
-    winRateByFamily: winRateGroupBy(rows, 'family'),
     winRateBySymbol: winRateGroupBy(rows, 'symbol')
   };
 }
@@ -294,8 +413,6 @@ function computeAllVersionStats(){
   });
 }
 
-// Auto-detect the purest baseline: legacy SL, no BBW, no RSI. Falls back to
-// whichever version has the earliest signals if no exact match exists yet.
 function detectBaselineVersion(){
   const versions = Object.keys(versionStats);
   const pure = versions.find(v => v.includes('_legacySL') && !v.includes('_bbw') && !v.includes('_rsi'));
@@ -318,7 +435,6 @@ function populateBaselineSelect(){
   select.onchange = () => { selectedBaseline = select.value; renderAll(); };
 }
 
-// --- Formatting helpers ----------------------------------------------------
 function fmtNum(v, decimals){ return (v == null || isNaN(v)) ? '—' : v.toFixed(decimals); }
 function fmtPct(v){ return (v == null || isNaN(v)) ? '—' : v.toFixed(1) + '%'; }
 function fmtPrice(v){ return (v == null || isNaN(v)) ? '—' : v.toFixed(v >= 100 ? 2 : 5); }
@@ -329,13 +445,93 @@ function fmtDuration(mins){
 }
 
 function renderAll(){
+  renderDashboard();
   renderStatsTable();
-  renderFamilyTable();
   renderSymbolTable();
   renderVerdicts();
   renderReleaseAdvisor();
   renderNextExperiments();
   renderMarketIntelligence();
+}
+
+function renderDashboard(){
+  const versions = Object.keys(versionStats);
+  const advisor = computeReleaseAdvisor();
+  
+  let bestVersion = '—';
+  if(versions.length > 0){
+    let best = versions[0];
+    let bestScore = -Infinity;
+    versions.forEach(v => {
+      const s = versionStats[v];
+      if(s.resolved >= MIN_RESOLVED_SAMPLE && (s.expectancy || -Infinity) > bestScore){
+        best = v; bestScore = s.expectancy;
+      }
+    });
+    bestVersion = best;
+  }
+
+  const allResolved = Object.values(versionStats).reduce((a,b) => a + b.resolved, 0);
+  const allSignals = allRows.length;
+  const allSymbols = [...new Set(allRows.map(r => r.symbol).filter(Boolean))].length;
+  const overallWinRate = allResolved > 0 
+    ? (allRows.filter(r => r.outcome === 'win').length / allResolved) * 100
+    : null;
+  
+  let overallPF = null;
+  const allWins = allRows.filter(r => r.outcome === 'win');
+  const allLosses = allRows.filter(r => r.outcome === 'loss');
+  const grossProfit = allWins.reduce((a,b) => a + (Math.abs(b.tp_price - b.entry_price) || 0), 0);
+  const grossLoss = allLosses.reduce((a,b) => a + (Math.abs(b.entry_price - b.sl_price) || 0), 0);
+  if(grossLoss > 0) overallPF = grossProfit / grossLoss;
+
+  let overallExp = null;
+  if(overallWinRate != null && allWins.length > 0 && allLosses.length > 0){
+    const avgWin = grossProfit / allWins.length;
+    const avgLoss = grossLoss / allLosses.length;
+    overallExp = (overallWinRate/100 * avgWin) - ((1 - overallWinRate/100) * avgLoss);
+  }
+
+  const html = `
+    <div class="summary-card">
+      <div class="label">Current Best Version</div>
+      <div class="value">${bestVersion}</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Recommended Release</div>
+      <div class="value ${advisor.ready ? 'success' : 'warning'}">${advisor.version || '—'}</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Overall Win Rate</div>
+      <div class="value success">${fmtPct(overallWinRate)}</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Overall Profit Factor</div>
+      <div class="value ${overallPF >= 1.5 ? 'success' : (overallPF >= 1 ? 'warning' : 'danger')}">${fmtNum(overallPF, 2)}</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Overall Expectancy</div>
+      <div class="value ${overallExp > 0 ? 'success' : (overallExp < 0 ? 'danger' : 'warning')}">${fmtPrice(overallExp)}</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Loaded Versions</div>
+      <div class="value">${versions.length}</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Analysed Symbols</div>
+      <div class="value">${allSymbols}</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Total Signals</div>
+      <div class="value">${allSignals}</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Resolved Signals</div>
+      <div class="value">${allResolved}</div>
+    </div>
+  `;
+  document.getElementById('dashboardSummary').innerHTML = html;
+
   document.getElementById('thresholdsNote').innerHTML =
     `Verdict thresholds (disclosed, not hidden logic): a version needs at least <b>${MIN_RESOLVED_SAMPLE} resolved trades</b> before any verdict is given. ` +
     `"Adopt" requires a win-rate improvement of at least <b>${WIN_RATE_MEANINGFUL_DELTA} points</b> AND non-negative expectancy change. ` +
@@ -392,13 +588,13 @@ function renderStatsTable(){
   document.getElementById('statsTable').innerHTML = html;
 }
 
-function renderGroupTable(elId, groupField){
+function renderSymbolTable(){
   const versions = Object.keys(versionStats).sort();
   const allKeys = new Set();
-  versions.forEach(v => Object.keys(versionStats[v][groupField]).forEach(k => allKeys.add(k)));
+  versions.forEach(v => Object.keys(versionStats[v].winRateBySymbol).forEach(k => allKeys.add(k)));
   const keys = [...allKeys].sort();
 
-  let html = '<thead><tr><th class="metric-col">' + (groupField === 'winRateByFamily' ? 'Family' : 'Symbol') + '</th>' +
+  let html = '<thead><tr><th class="metric-col">Symbol</th>' +
     versions.map(v => `<th class="${v === selectedBaseline ? 'baseline-col' : ''}">${v}</th>`).join('') +
     '</tr></thead><tbody>';
 
@@ -409,18 +605,15 @@ function renderGroupTable(elId, groupField){
   keys.forEach(key => {
     html += `<tr><td class="metric-col">${key}</td>`;
     versions.forEach(v => {
-      const g = versionStats[v][groupField][key];
+      const g = versionStats[v].winRateBySymbol[key];
       const display = g ? `${fmtPct(g.winRatePct)} (${g.wins}W/${g.losses}L)` : '—';
       html += `<td class="${v === selectedBaseline ? 'baseline-col' : ''}">${display}</td>`;
     });
     html += '</tr>';
   });
   html += '</tbody>';
-  document.getElementById(elId).innerHTML = html;
+  document.getElementById('symbolTable').innerHTML = html;
 }
-
-function renderFamilyTable(){ renderGroupTable('familyTable', 'winRateByFamily'); }
-function renderSymbolTable(){ renderGroupTable('symbolTable', 'winRateBySymbol'); }
 
 function computeVerdict(baseline, candidate){
   const b = versionStats[baseline];
@@ -456,16 +649,12 @@ function computeVerdict(baseline, candidate){
     `profit factor ${profitFactorDelta == null ? '—' : (profitFactorDelta >= 0 ? '+' : '') + profitFactorDelta.toFixed(2)}, ` +
     `signal rate ${quantityDelta == null ? '—' : (quantityDelta >= 0 ? '+' : '') + quantityDelta.toFixed(0) + '%'} vs baseline.`;
 
-  // Clearly worse: either win rate drops meaningfully, or expectancy drops materially.
   if(winRateDelta <= -WIN_RATE_MEANINGFUL_DELTA || expectancyDelta <= -EXPECTANCY_MEANINGFUL_DELTA_PCT){
     return { cls: 'reject', title: '❌ Reject — underperforms Baseline', body: summary };
   }
-  // Clear improvement: meaningful win-rate gain AND expectancy didn't get worse.
   if(winRateDelta >= WIN_RATE_MEANINGFUL_DELTA && expectancyDelta >= 0){
     return { cls: 'adopt', title: '✅ Adopt — meaningful improvement', body: summary };
   }
-  // Everything else: technically not worse, but not clearly better either —
-  // per your explicit instruction, a small edge isn't worth the complexity.
   return { cls: 'reject', title: '➖ Reject — improvement too small to justify added complexity', body: summary };
 }
 
@@ -489,15 +678,6 @@ function renderVerdicts(){
   }).join('');
 }
 
-// --- Release Advisor --------------------------------------------------------
-// Everything below is derived purely from versionStats / allRows at render
-// time — no version name or symbol name is ever hardcoded. Ranking uses a
-// weighted blend of several metrics (never win rate alone), min-max
-// normalized across whichever candidate versions currently have enough data.
-
-// Per-symbol metrics reuse the exact same computeVersionStats() used for
-// whole versions — a "symbol" here is just a differently-filtered row set,
-// so all the existing win/loss/expectancy/profit-factor math applies as-is.
 function computeSymbolBreakdown(version){
   const rows = allRows.filter(r => versionLabel(r) === version);
   const symbols = [...new Set(rows.map(r => r.symbol).filter(Boolean))];
@@ -508,10 +688,6 @@ function computeSymbolBreakdown(version){
   return out;
 }
 
-// Stability = how consistent the win rate is across a version's own symbols.
-// Lower spread (stdDev) = more stable = better. Symbols with too few
-// resolved trades are excluded from the spread calc so one thin sample
-// doesn't dominate the reading.
 function computeStability(version){
   const symStats = computeSymbolBreakdown(version);
   const rates = Object.values(symStats)
@@ -523,9 +699,6 @@ function computeStability(version){
   return Math.sqrt(variance);
 }
 
-// Min-max normalize a list of {version, value} into {..., norm: 0..1}.
-// invert=true means a LOWER raw value is better (e.g. stability's stdDev).
-// Missing values get a neutral 0.5 so one absent metric doesn't zero a version out.
 function normalizeMetric(list, invert){
   const valid = list.filter(v => v.value != null && !isNaN(v.value));
   if(valid.length === 0) return list.map(v => ({...v, norm: 0.5}));
@@ -541,13 +714,8 @@ function normalizeMetric(list, invert){
 }
 
 const RELEASE_ADVISOR_WEIGHTS = {
-  pf: 0.25,   // Profit factor
-  exp: 0.20,  // Expectancy
-  wr: 0.20,   // Win rate
-  res: 0.10,  // Resolved trades (sample size)
-  sig: 0.05,  // Signal count (volume)
-  conf: 0.10, // Avg confidence
-  stab: 0.10  // Stability across symbols
+  pf: 0.25, exp: 0.20, wr: 0.20, res: 0.10,
+  sig: 0.05, conf: 0.10, stab: 0.10
 };
 
 const RELEASE_ADVISOR_FACTOR_LABELS = {
@@ -602,9 +770,6 @@ function computeReleaseAdvisor(){
   const top = scores[0];
   let confidence = Math.round(top.score * 100);
 
-  // Cross-check against the existing Verdict-vs-Baseline logic so the two
-  // panels never silently disagree — this doesn't change ranking, only tempers
-  // (or corroborates) the confidence and explains itself in the reason text.
   let baselineNote = '';
   if(selectedBaseline && versionStats[selectedBaseline] && versionStats[selectedBaseline].resolved >= MIN_RESOLVED_SAMPLE){
     if(top.version !== selectedBaseline){
@@ -632,7 +797,6 @@ function computeReleaseAdvisor(){
   const reason = `Ranked highest among ${candidates.length} version(s) with at least ${MIN_RESOLVED_SAMPLE} resolved trades, led by strong ${topFactors}. ` +
     `Weighted confidence of ${confidence}% ${statusWord} the ${READY_THRESHOLD_PCT}% bar for Public release.${baselineNote}`;
 
-  // Symbol-level KEEP / DISABLE / INSUFFICIENT DATA for the recommended version.
   const symStats = computeSymbolBreakdown(top.version);
   const keep = [], disable = [], insufficient = [];
   Object.keys(symStats).sort().forEach(sym => {
@@ -700,12 +864,6 @@ function renderReleaseAdvisor(){
   wrap.innerHTML = html;
 }
 
-// --- Next Experiment -------------------------------------------------------
-// Analyses every loaded version/symbol/family and proposes what to test next.
-// Nothing here is a fixed string — every recommendation is built from the
-// symbol/family name and numbers actually present in versionStats at render
-// time, using the exact same computeVersionStats() math as the rest of the
-// page (via computeSymbolBreakdown / computeFamilyBreakdown).
 function computeFamilyBreakdown(version){
   const rows = allRows.filter(r => versionLabel(r) === version);
   const families = [...new Set(rows.map(r => r.family).filter(Boolean))];
@@ -720,8 +878,6 @@ function computeNextExperiments(){
   const versions = Object.keys(versionStats);
   if(versions.length === 0) return [];
 
-  // The "focus" version is whichever one is currently collecting the most
-  // signals — i.e. the experiment actively being run right now.
   const focusVersion = versions.reduce((best, v) =>
     (!best || versionStats[v].totalSignals > versionStats[best].totalSignals) ? v : best, null);
 
@@ -729,7 +885,6 @@ function computeNextExperiments(){
   const famStats = computeFamilyBreakdown(focusVersion);
   const candidates = [];
 
-  // --- Symbol-level rules --------------------------------------------------
   Object.keys(symStats).sort().forEach(sym => {
     const s = symStats[sym];
     const resolved = s.resolved;
@@ -744,10 +899,9 @@ function computeNextExperiments(){
         sampleSize: `Need ${needed} more resolved trades.`,
         confidence: 90
       });
-      return; // no other symbol rule is meaningful without enough data
+      return;
     }
 
-    // Has this symbol underperformed in every version with enough of its own data?
     const qualifying = versions.filter(v => {
       const vs = versionStats[v].winRateBySymbol[sym];
       return vs && (vs.wins + vs.losses) >= MIN_SYMBOL_SAMPLE;
@@ -801,17 +955,16 @@ function computeNextExperiments(){
     }
   });
 
-  // --- Family-level rules ---------------------------------------------------
   Object.keys(famStats).sort().forEach(fam => {
     const f = famStats[fam];
-    if(f.resolved < MIN_RESOLVED_SAMPLE) return; // not enough to reason about the family yet
+    if(f.resolved < MIN_RESOLVED_SAMPLE) return;
 
     const qualifying = versions.filter(v => {
-      const vf = versionStats[v].winRateByFamily[fam];
+      const vf = versionStats[v].winRateBySymbol[fam];
       return vf && (vf.wins + vf.losses) >= MIN_RESOLVED_SAMPLE;
     });
     const underperformingIn = qualifying.filter(v => {
-      const vf = versionStats[v].winRateByFamily[fam];
+      const vf = versionStats[v].winRateBySymbol[fam];
       return vf.winRatePct != null && vf.winRatePct < SYMBOL_KEEP_WIN_RATE;
     });
     if(qualifying.length >= 2 && underperformingIn.length === qualifying.length){
@@ -825,7 +978,6 @@ function computeNextExperiments(){
       });
     }
 
-    // Does confidence actually separate winners from losers in this family?
     if(f.avgConfidenceWin != null && f.avgConfidenceLoss != null){
       const gap = f.avgConfidenceWin - f.avgConfidenceLoss;
       if(gap < 5){
@@ -840,7 +992,6 @@ function computeNextExperiments(){
       }
     }
 
-    // Structural risk:reward check — hints at stop/target (ATR) sizing.
     if(f.riskReward != null && f.riskReward < 1 && f.winRatePct != null && f.winRatePct < 60){
       const edge = Math.min(1, 1 - f.riskReward);
       candidates.push({
@@ -888,14 +1039,6 @@ function renderNextExperiments(){
   `).join('');
 }
 
-// --- Market Intelligence Engine ---------------------------------------------
-// Analyses the BEHAVIOUR of every symbol (across all loaded versions, since
-// a symbol's underlying market behaviour is not tied to any one strategy
-// version) rather than just its trade results. Every score is a min-max
-// normalization of a raw statistic across the symbols currently loaded — none
-// of it is a fixed threshold, so it adapts automatically as more data or new
-// symbols appear.
-
 const BEHAVIOR_METRIC_LABELS = {
   trendStrength: 'Trend Strength', volatility: 'Volatility', consistency: 'Consistency',
   tradeStability: 'Trade Stability', winLossStability: 'Win/Loss Stability',
@@ -920,8 +1063,6 @@ function stdDevOf(arr){
   return Math.sqrt(variance);
 }
 
-// Raw (un-normalized) behavioural statistics for one symbol, pulled straight
-// from its historical rows across every version.
 function computeSymbolRawMetrics(sym){
   const rows = allRows.filter(r => r.symbol === sym);
   const stats = computeVersionStats(rows);
@@ -930,7 +1071,6 @@ function computeSymbolRawMetrics(sym){
     .filter(r => (r.outcome === 'win' || r.outcome === 'loss') && r.opened_at != null)
     .sort((a,b) => a.opened_at - b.opened_at);
 
-  // Consistency: how much the win rate drifts between the first and second half of history.
   let consistencyDeltaRaw = null;
   if(resolvedChrono.length >= 10){
     const mid = Math.floor(resolvedChrono.length/2);
@@ -940,7 +1080,6 @@ function computeSymbolRawMetrics(sym){
     if(wr1 != null && wr2 != null) consistencyDeltaRaw = Math.abs(wr1 - wr2);
   }
 
-  // Trade Stability: coefficient of variation of trade duration (lower = more stable).
   const durations = resolvedChrono.filter(r => r.closed_at != null).map(r => (r.closed_at - r.opened_at) / 60);
   let durationCVRaw = null;
   if(durations.length >= 5){
@@ -948,7 +1087,6 @@ function computeSymbolRawMetrics(sym){
     if(mean > 0) durationCVRaw = stdDevOf(durations) / mean;
   }
 
-  // Win/Loss Stability: spread of win rate across consecutive chunks of 10 resolved trades.
   let chunkStdDevRaw = null;
   if(resolvedChrono.length >= 20){
     const rates = [];
@@ -959,7 +1097,6 @@ function computeSymbolRawMetrics(sym){
     if(rates.length >= 2) chunkStdDevRaw = stdDevOf(rates);
   }
 
-  // Confidence Stability: spread of raw confidence values issued for this symbol.
   const confVals = rows.map(r => r.confidence).filter(v => v != null);
   const confStdDevRaw = confVals.length >= 5 ? stdDevOf(confVals) : null;
 
@@ -1073,8 +1210,6 @@ function computeSimilarSymbolGroups(profiles){
   for(let i=0;i<n;i++) for(let j=i+1;j<n;j++) pairs.push({ i, j, d: dist(profiles[i], profiles[j]) });
   if(pairs.length === 0) return [];
 
-  // Cluster the closest quarter of all pairwise distances — a dynamic threshold
-  // that adapts to however spread out (or tight) this dataset's symbols are.
   const sortedDist = pairs.map(p => p.d).sort((a,b) => a-b);
   const threshold = sortedDist[Math.floor(sortedDist.length * 0.25)];
 
@@ -1270,12 +1405,107 @@ function renderLongTermRecommendations(profiles){
 }
 
 function renderMarketIntelligence(){
-  const profiles = computeAllSymbolProfiles();
-  renderBehaviorProfiles(profiles);
-  renderSimilarSymbols(profiles);
-  renderOutliers(profiles);
-  renderLongTermRecommendations(profiles);
+  renderBehaviorProfiles(allSymbolProfiles);
+  renderSimilarSymbols(allSymbolProfiles);
+  renderOutliers(allSymbolProfiles);
+  renderLongTermRecommendations(allSymbolProfiles);
 }
+
+function updateStatusStrip(){
+  const advisor = computeReleaseAdvisor();
+  const versions = Object.keys(versionStats);
+  const allSymbols = [...new Set(allRows.map(r => r.symbol).filter(Boolean))];
+
+  document.getElementById('publicVersionText').textContent = advisor.version || '—';
+  document.getElementById('datasetText').textContent = allRows.length + ' Signals';
+  
+  const hours = Math.floor(Math.abs(Date.now() - lastRefreshTime.getTime()) / 1000 / 60);
+  if(hours < 1){
+    document.getElementById('lastRefreshText').textContent = 'just now';
+  } else if(hours < 60){
+    document.getElementById('lastRefreshText').textContent = hours + ' minutes ago';
+  } else {
+    const d = Math.floor(hours / 60);
+    document.getElementById('lastRefreshText').textContent = d + ' hours ago';
+  }
+}
+
+function updateBadges(){
+  const versions = Object.keys(versionStats);
+  const allSymbols = [...new Set(allRows.map(r => r.symbol).filter(Boolean))];
+  const advisor = computeReleaseAdvisor();
+  const recs = computeNextExperiments();
+
+  document.getElementById('badge-statistics').textContent = '(' + versions.length + ')';
+  document.getElementById('badge-symbols').textContent = '(' + allSymbols.length + ')';
+  document.getElementById('badge-release').textContent = advisor.ready ? '✓' : '⚠';
+  document.getElementById('badge-research').textContent = '(' + recs.length + ')';
+  document.getElementById('badge-intelligence').textContent = '🧠';
+}
+
+function switchTab(tabName){
+  const tabs = ['dashboard', 'statistics', 'symbols', 'release', 'research', 'intelligence'];
+  tabs.forEach(t => {
+    document.getElementById(t).classList.remove('active');
+  });
+  document.getElementById(tabName).classList.add('active');
+
+  const btns = document.querySelectorAll('.nav-tab');
+  btns.forEach(b => b.classList.remove('active'));
+  event.target.closest('.nav-tab').classList.add('active');
+}
+
+function exportCSV(){
+  if(allRows.length === 0) return alert('No data to export');
+  const headers = Object.keys(allRows[0]);
+  const csv = [headers.join(','), ...allRows.map(r => headers.map(h => JSON.stringify(r[h])).join(','))].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'lab_export_' + new Date().getTime() + '.csv';
+  a.click();
+}
+
+function exportJSON(){
+  if(allRows.length === 0) return alert('No data to export');
+  const data = {
+    exportedAt: new Date().toISOString(),
+    totalRows: allRows.length,
+    versions: Object.keys(versionStats),
+    versionStats: versionStats,
+    rows: allRows
+  };
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'lab_export_' + new Date().getTime() + '.json';
+  a.click();
+}
+
+function toggleAllExpanded(){
+  alert('Collapse/Expand functionality would be implemented based on your specific UI structure.');
+}
+
+document.addEventListener('keydown', e => {
+  if(e.ctrlKey || e.metaKey){
+    const tabs = { '1': 'dashboard', '2': 'statistics', '3': 'symbols', '4': 'release', '5': 'research', '6': 'intelligence' };
+    if(tabs[e.key]) {
+      e.preventDefault();
+      switchTab(tabs[e.key]);
+      document.querySelector(`[onclick="switchTab('${tabs[e.key]}')"]`).classList.add('active');
+      document.querySelectorAll('.nav-tab').forEach(b => {
+        if(b.textContent.includes(['📊','📈','🎯','🚀','🧪','🧠'][parseInt(e.key)-1])){
+          b.classList.add('active');
+        } else {
+          b.classList.remove('active');
+        }
+      });
+    }
+  }
+});
 
 if(adminSecret){
   tryShowPanel();
