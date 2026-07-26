@@ -50,6 +50,8 @@
   .empty-note{ color:var(--muted); font-family:'IBM Plex Mono',monospace; font-size:13px; text-align:center; padding:30px 0; }
   .thresholds-note{ font-size:11px; color:var(--muted); margin-top:10px; line-height:1.6; }
   .baseline-selector{ display:flex; gap:12px; align-items:flex-end; margin-bottom:20px; flex-wrap:wrap; }
+  .advisor-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; margin-top:6px; }
+  .advisor-grid .v-body div{ margin-bottom:4px; }
 </style>
 </head>
 <body>
@@ -107,6 +109,11 @@
     <h2>Verdict vs Baseline</h2>
     <div id="verdictWrap"></div>
   </div>
+
+  <div class="panel">
+    <h2>Release Advisor</h2>
+    <div id="releaseAdvisorWrap"></div>
+  </div>
 </div>
 
 <script>
@@ -123,6 +130,16 @@ let selectedBaseline = null;
 const MIN_RESOLVED_SAMPLE = 30;       // below this, no verdict is given at all
 const WIN_RATE_MEANINGFUL_DELTA = 3.0; // percentage points
 const EXPECTANCY_MEANINGFUL_DELTA_PCT = 10.0; // relative % change
+
+// --- Release Advisor thresholds (disclosed) --------------------------------
+// A version needs this weighted confidence score to be called release-ready.
+const READY_THRESHOLD_PCT = 65;
+// A symbol needs at least this many resolved trades before it gets a
+// KEEP/DISABLE call at all — below this it's "insufficient data", never
+// silently lumped in with disabled symbols.
+const MIN_SYMBOL_SAMPLE = 40;
+// Minimum per-symbol win rate (with non-negative expectancy) to be kept enabled.
+const SYMBOL_KEEP_WIN_RATE = 45.0;
 
 const LEGACY_VERSION_LABEL = 'v0_legacy (pre-tracking)';
 function versionLabel(row){ return row.strategy_version || LEGACY_VERSION_LABEL; }
@@ -292,6 +309,7 @@ function renderAll(){
   renderFamilyTable();
   renderSymbolTable();
   renderVerdicts();
+  renderReleaseAdvisor();
   document.getElementById('thresholdsNote').innerHTML =
     `Verdict thresholds (disclosed, not hidden logic): a version needs at least <b>${MIN_RESOLVED_SAMPLE} resolved trades</b> before any verdict is given. ` +
     `"Adopt" requires a win-rate improvement of at least <b>${WIN_RATE_MEANINGFUL_DELTA} points</b> AND non-negative expectancy change. ` +
@@ -443,6 +461,217 @@ function renderVerdicts(){
         <div class="v-body">${verdict.body}</div>
       </div>`;
   }).join('');
+}
+
+// --- Release Advisor --------------------------------------------------------
+// Everything below is derived purely from versionStats / allRows at render
+// time — no version name or symbol name is ever hardcoded. Ranking uses a
+// weighted blend of several metrics (never win rate alone), min-max
+// normalized across whichever candidate versions currently have enough data.
+
+// Per-symbol metrics reuse the exact same computeVersionStats() used for
+// whole versions — a "symbol" here is just a differently-filtered row set,
+// so all the existing win/loss/expectancy/profit-factor math applies as-is.
+function computeSymbolBreakdown(version){
+  const rows = allRows.filter(r => versionLabel(r) === version);
+  const symbols = [...new Set(rows.map(r => r.symbol).filter(Boolean))];
+  const out = {};
+  symbols.forEach(sym => {
+    out[sym] = computeVersionStats(rows.filter(r => r.symbol === sym));
+  });
+  return out;
+}
+
+// Stability = how consistent the win rate is across a version's own symbols.
+// Lower spread (stdDev) = more stable = better. Symbols with too few
+// resolved trades are excluded from the spread calc so one thin sample
+// doesn't dominate the reading.
+function computeStability(version){
+  const symStats = computeSymbolBreakdown(version);
+  const rates = Object.values(symStats)
+    .filter(s => s.resolved >= 10 && s.winRatePct != null)
+    .map(s => s.winRatePct);
+  if(rates.length < 2) return null;
+  const mean = rates.reduce((a,b) => a+b, 0) / rates.length;
+  const variance = rates.reduce((a,b) => a + Math.pow(b-mean,2), 0) / rates.length;
+  return Math.sqrt(variance);
+}
+
+// Min-max normalize a list of {version, value} into {..., norm: 0..1}.
+// invert=true means a LOWER raw value is better (e.g. stability's stdDev).
+// Missing values get a neutral 0.5 so one absent metric doesn't zero a version out.
+function normalizeMetric(list, invert){
+  const valid = list.filter(v => v.value != null && !isNaN(v.value));
+  if(valid.length === 0) return list.map(v => ({...v, norm: 0.5}));
+  const min = Math.min(...valid.map(v => v.value));
+  const max = Math.max(...valid.map(v => v.value));
+  return list.map(v => {
+    if(v.value == null || isNaN(v.value)) return {...v, norm: 0.5};
+    if(max === min) return {...v, norm: 1};
+    let n = (v.value - min) / (max - min);
+    if(invert) n = 1 - n;
+    return {...v, norm: n};
+  });
+}
+
+const RELEASE_ADVISOR_WEIGHTS = {
+  pf: 0.25,   // Profit factor
+  exp: 0.20,  // Expectancy
+  wr: 0.20,   // Win rate
+  res: 0.10,  // Resolved trades (sample size)
+  sig: 0.05,  // Signal count (volume)
+  conf: 0.10, // Avg confidence
+  stab: 0.10  // Stability across symbols
+};
+
+const RELEASE_ADVISOR_FACTOR_LABELS = {
+  pf: 'profit factor', exp: 'expectancy', wr: 'win rate', res: 'sample size',
+  sig: 'signal volume', conf: 'signal confidence', stab: 'stability across symbols'
+};
+
+function computeReleaseAdvisor(){
+  const versions = Object.keys(versionStats);
+  const candidates = versions.filter(v => versionStats[v].resolved >= MIN_RESOLVED_SAMPLE);
+
+  if(candidates.length === 0){
+    return {
+      version: null, ready: false, confidence: 0,
+      reason: `No version has reached the minimum ${MIN_RESOLVED_SAMPLE} resolved trades yet — nothing can be recommended for Public release.`,
+      keep: [], disable: [], insufficient: []
+    };
+  }
+
+  const metricLists = {
+    pf:   candidates.map(v => ({ version: v, value: versionStats[v].profitFactor })),
+    exp:  candidates.map(v => ({ version: v, value: versionStats[v].expectancy })),
+    wr:   candidates.map(v => ({ version: v, value: versionStats[v].winRatePct })),
+    res:  candidates.map(v => ({ version: v, value: versionStats[v].resolved })),
+    sig:  candidates.map(v => ({ version: v, value: versionStats[v].totalSignals })),
+    conf: candidates.map(v => ({ version: v, value: versionStats[v].avgConfidence })),
+    stab: candidates.map(v => ({ version: v, value: computeStability(v) }))
+  };
+
+  const normed = {
+    pf: normalizeMetric(metricLists.pf, false),
+    exp: normalizeMetric(metricLists.exp, false),
+    wr: normalizeMetric(metricLists.wr, false),
+    res: normalizeMetric(metricLists.res, false),
+    sig: normalizeMetric(metricLists.sig, false),
+    conf: normalizeMetric(metricLists.conf, false),
+    stab: normalizeMetric(metricLists.stab, true)
+  };
+
+  const scores = candidates.map((v, i) => {
+    const breakdown = {};
+    let total = 0;
+    Object.keys(RELEASE_ADVISOR_WEIGHTS).forEach(key => {
+      const n = normed[key][i].norm;
+      breakdown[key] = n;
+      total += n * RELEASE_ADVISOR_WEIGHTS[key];
+    });
+    return { version: v, score: total, breakdown };
+  });
+
+  scores.sort((a,b) => b.score - a.score);
+  const top = scores[0];
+  let confidence = Math.round(top.score * 100);
+
+  // Cross-check against the existing Verdict-vs-Baseline logic so the two
+  // panels never silently disagree — this doesn't change ranking, only tempers
+  // (or corroborates) the confidence and explains itself in the reason text.
+  let baselineNote = '';
+  if(selectedBaseline && versionStats[selectedBaseline] && versionStats[selectedBaseline].resolved >= MIN_RESOLVED_SAMPLE){
+    if(top.version !== selectedBaseline){
+      const verdict = computeVerdict(selectedBaseline, top.version);
+      if(verdict.cls === 'reject'){
+        confidence = Math.round(confidence * 0.6);
+        baselineNote = ` Note: the Verdict panel calls this version's showing against baseline "${selectedBaseline}" a reject (${verdict.title.replace(/^[^\w]*/,'')}), which tempers this confidence score.`;
+      } else if(verdict.cls === 'adopt'){
+        baselineNote = ` This lines up with the Verdict panel, which independently flags it as an adopt-worthy improvement over baseline "${selectedBaseline}".`;
+      }
+    } else {
+      baselineNote = ` This is also the currently selected baseline — no other version has yet shown a clear enough edge to replace it.`;
+    }
+  }
+
+  const ready = confidence >= READY_THRESHOLD_PCT;
+  const statusWord = ready ? 'clears' : 'falls short of';
+
+  const topFactors = Object.entries(top.breakdown)
+    .sort((a,b) => b[1] - a[1])
+    .slice(0, 2)
+    .map(([k]) => RELEASE_ADVISOR_FACTOR_LABELS[k])
+    .join(' and ');
+
+  const reason = `Ranked highest among ${candidates.length} version(s) with at least ${MIN_RESOLVED_SAMPLE} resolved trades, led by strong ${topFactors}. ` +
+    `Weighted confidence of ${confidence}% ${statusWord} the ${READY_THRESHOLD_PCT}% bar for Public release.${baselineNote}`;
+
+  // Symbol-level KEEP / DISABLE / INSUFFICIENT DATA for the recommended version.
+  const symStats = computeSymbolBreakdown(top.version);
+  const keep = [], disable = [], insufficient = [];
+  Object.keys(symStats).sort().forEach(sym => {
+    const s = symStats[sym];
+    if(s.resolved < MIN_SYMBOL_SAMPLE){
+      insufficient.push({ symbol: sym, resolved: s.resolved });
+    } else if(s.winRatePct != null && s.winRatePct >= SYMBOL_KEEP_WIN_RATE && (s.expectancy == null || s.expectancy >= 0)){
+      keep.push({ symbol: sym, winRatePct: s.winRatePct, resolved: s.resolved });
+    } else {
+      disable.push({ symbol: sym, winRatePct: s.winRatePct, resolved: s.resolved });
+    }
+  });
+
+  return { version: top.version, ready, confidence, reason, keep, disable, insufficient };
+}
+
+function renderReleaseAdvisor(){
+  const wrap = document.getElementById('releaseAdvisorWrap');
+  const advisor = computeReleaseAdvisor();
+
+  if(!advisor.version){
+    wrap.innerHTML = `<div class="empty-note">${advisor.reason}</div>`;
+    return;
+  }
+
+  const statusCls = advisor.ready ? 'adopt' : 'reject';
+  const statusLabel = advisor.ready ? '✅ READY FOR PUBLIC' : '⛔ NOT READY';
+
+  let html = `
+    <div class="verdict-card">
+      <div class="v-title verdict ${statusCls}">Recommended Version — ${advisor.version}</div>
+      <div class="v-body">
+        <div><b>Release Confidence:</b> ${advisor.confidence}%</div>
+        <div><b>Status:</b> <span class="verdict ${statusCls}">${statusLabel}</span></div>
+        <div style="margin-top:8px;"><b>Reason:</b> ${advisor.reason}</div>
+      </div>
+    </div>
+    <div class="advisor-grid">
+      <div class="verdict-card">
+        <div class="v-title verdict adopt">KEEP</div>
+        <div class="v-body">${
+          advisor.keep.length
+            ? advisor.keep.map(s => `<div class="pos">✓ ${s.symbol} — ${fmtPct(s.winRatePct)} WR (${s.resolved} resolved)</div>`).join('')
+            : '<div class="neutral">No symbols currently qualify.</div>'
+        }</div>
+      </div>
+      <div class="verdict-card">
+        <div class="v-title verdict reject">DISABLE</div>
+        <div class="v-body">${
+          advisor.disable.length
+            ? advisor.disable.map(s => `<div class="neg">✗ ${s.symbol} — ${fmtPct(s.winRatePct)} WR (${s.resolved} resolved)</div>`).join('')
+            : '<div class="neutral">No symbols currently flagged for removal.</div>'
+        }</div>
+      </div>
+      <div class="verdict-card">
+        <div class="v-title verdict wait">INSUFFICIENT DATA</div>
+        <div class="v-body">${
+          advisor.insufficient.length
+            ? advisor.insufficient.map(s => `<div class="neutral">— ${s.symbol}: ${s.resolved} resolved (need at least ${MIN_SYMBOL_SAMPLE})</div>`).join('')
+            : '<div class="neutral">All tracked symbols have enough data to be classified.</div>'
+        }</div>
+      </div>
+    </div>`;
+
+  wrap.innerHTML = html;
 }
 
 if(adminSecret){
