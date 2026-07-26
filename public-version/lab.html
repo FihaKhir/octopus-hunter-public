@@ -52,6 +52,10 @@
   .baseline-selector{ display:flex; gap:12px; align-items:flex-end; margin-bottom:20px; flex-wrap:wrap; }
   .advisor-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; margin-top:6px; }
   .advisor-grid .v-body div{ margin-bottom:4px; }
+  .subhead{ font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--gold); text-transform:uppercase; letter-spacing:0.05em; margin:22px 0 10px; font-weight:700; }
+  .subhead:first-of-type{ margin-top:0; }
+  .profile-metrics span{ display:inline-block; margin:2px 12px 6px 0; font-size:12px; color:var(--muted); }
+  .profile-metrics span b{ color:var(--text); }
 </style>
 </head>
 <body>
@@ -118,6 +122,21 @@
   <div class="panel">
     <h2>Next Experiment</h2>
     <div id="nextExperimentWrap"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Market Intelligence Engine</h2>
+    <div class="subhead">Behaviour Profiles</div>
+    <div id="behaviorProfilesWrap"></div>
+
+    <div class="subhead">Similar Symbols</div>
+    <div id="similarSymbolsWrap"></div>
+
+    <div class="subhead">Outliers</div>
+    <div id="outliersWrap"></div>
+
+    <div class="subhead">Long-Term Recommendations</div>
+    <div id="longTermRecsWrap"></div>
   </div>
 </div>
 
@@ -316,6 +335,7 @@ function renderAll(){
   renderVerdicts();
   renderReleaseAdvisor();
   renderNextExperiments();
+  renderMarketIntelligence();
   document.getElementById('thresholdsNote').innerHTML =
     `Verdict thresholds (disclosed, not hidden logic): a version needs at least <b>${MIN_RESOLVED_SAMPLE} resolved trades</b> before any verdict is given. ` +
     `"Adopt" requires a win-rate improvement of at least <b>${WIN_RATE_MEANINGFUL_DELTA} points</b> AND non-negative expectancy change. ` +
@@ -866,6 +886,395 @@ function renderNextExperiments(){
       </div>
     </div>
   `).join('');
+}
+
+// --- Market Intelligence Engine ---------------------------------------------
+// Analyses the BEHAVIOUR of every symbol (across all loaded versions, since
+// a symbol's underlying market behaviour is not tied to any one strategy
+// version) rather than just its trade results. Every score is a min-max
+// normalization of a raw statistic across the symbols currently loaded — none
+// of it is a fixed threshold, so it adapts automatically as more data or new
+// symbols appear.
+
+const BEHAVIOR_METRIC_LABELS = {
+  trendStrength: 'Trend Strength', volatility: 'Volatility', consistency: 'Consistency',
+  tradeStability: 'Trade Stability', winLossStability: 'Win/Loss Stability',
+  confidenceStability: 'Confidence Stability', avgDuration: 'Avg Trade Duration',
+  riskEfficiency: 'Risk Efficiency', profitEfficiency: 'Profit Efficiency',
+  signalFrequency: 'Signal Frequency'
+};
+
+const BEHAVIOR_SCORE_WEIGHTS = {
+  trendStrength: 0.12, volatility: 0.05, consistency: 0.15, tradeStability: 0.10,
+  winLossStability: 0.12, confidenceStability: 0.08, avgDuration: 0.03,
+  riskEfficiency: 0.15, profitEfficiency: 0.15, signalFrequency: 0.05
+};
+
+const SIMILARITY_KEYS = ['trendStrength','volatility','consistency','tradeStability',
+  'winLossStability','confidenceStability','riskEfficiency','profitEfficiency','signalFrequency'];
+
+function stdDevOf(arr){
+  if(arr.length === 0) return null;
+  const mean = arr.reduce((a,b) => a+b, 0) / arr.length;
+  const variance = arr.reduce((a,b) => a + Math.pow(b-mean,2), 0) / arr.length;
+  return Math.sqrt(variance);
+}
+
+// Raw (un-normalized) behavioural statistics for one symbol, pulled straight
+// from its historical rows across every version.
+function computeSymbolRawMetrics(sym){
+  const rows = allRows.filter(r => r.symbol === sym);
+  const stats = computeVersionStats(rows);
+
+  const resolvedChrono = rows
+    .filter(r => (r.outcome === 'win' || r.outcome === 'loss') && r.opened_at != null)
+    .sort((a,b) => a.opened_at - b.opened_at);
+
+  // Consistency: how much the win rate drifts between the first and second half of history.
+  let consistencyDeltaRaw = null;
+  if(resolvedChrono.length >= 10){
+    const mid = Math.floor(resolvedChrono.length/2);
+    const wr = arr => arr.length ? (arr.filter(r => r.outcome === 'win').length / arr.length) * 100 : null;
+    const wr1 = wr(resolvedChrono.slice(0,mid));
+    const wr2 = wr(resolvedChrono.slice(mid));
+    if(wr1 != null && wr2 != null) consistencyDeltaRaw = Math.abs(wr1 - wr2);
+  }
+
+  // Trade Stability: coefficient of variation of trade duration (lower = more stable).
+  const durations = resolvedChrono.filter(r => r.closed_at != null).map(r => (r.closed_at - r.opened_at) / 60);
+  let durationCVRaw = null;
+  if(durations.length >= 5){
+    const mean = durations.reduce((a,b) => a+b, 0) / durations.length;
+    if(mean > 0) durationCVRaw = stdDevOf(durations) / mean;
+  }
+
+  // Win/Loss Stability: spread of win rate across consecutive chunks of 10 resolved trades.
+  let chunkStdDevRaw = null;
+  if(resolvedChrono.length >= 20){
+    const rates = [];
+    for(let i=0; i+10 <= resolvedChrono.length; i+=10){
+      const chunk = resolvedChrono.slice(i, i+10);
+      rates.push((chunk.filter(r => r.outcome === 'win').length / chunk.length) * 100);
+    }
+    if(rates.length >= 2) chunkStdDevRaw = stdDevOf(rates);
+  }
+
+  // Confidence Stability: spread of raw confidence values issued for this symbol.
+  const confVals = rows.map(r => r.confidence).filter(v => v != null);
+  const confStdDevRaw = confVals.length >= 5 ? stdDevOf(confVals) : null;
+
+  return {
+    symbol: sym, stats,
+    trendRaw: (stats.avgProfitPerWin != null && stats.winRatePct != null) ? stats.avgProfitPerWin * (stats.winRatePct/100) : null,
+    volatilityRaw: (stats.avgSLDistance != null || stats.avgTPDistance != null) ? ((stats.avgSLDistance||0)+(stats.avgTPDistance||0))/2 : null,
+    consistencyDeltaRaw,
+    durationCVRaw,
+    chunkStdDevRaw,
+    confStdDevRaw,
+    riskEfficiencyRaw: stats.expectancy,
+    profitEfficiencyRaw: stats.profitFactor,
+    signalFrequencyRaw: stats.signalsPerHour,
+    avgDurationRaw: stats.avgDurationMin
+  };
+}
+
+function classifyBehaviour(stats, s){
+  if(stats.resolved < MIN_SYMBOL_SAMPLE) return 'Experimental';
+  if(s.trendStrength >= 70 && s.consistency >= 60) return 'Strong Trend';
+  if(s.trendStrength >= 55 && s.consistency < 50) return 'Momentum';
+  if(s.trendStrength < 40 && s.volatility >= 70 && s.winLossStability < 40) return 'Spike Behaviour';
+  if(s.winLossStability < 35 && s.confidenceStability < 35) return 'High Noise';
+  if(s.volatility < 30 && s.tradeStability >= 65) return 'Compression';
+  if(s.trendStrength < 40 && s.consistency >= 60 && s.volatility < 50) return 'Range Market';
+  if(s.confidenceStability < 40 && s.riskEfficiency < 40) return 'Low Confidence';
+  if(s.consistency >= 70 && s.winLossStability >= 65 && s.riskEfficiency >= 55) return 'Stable Performer';
+  if(s.trendStrength >= 40 && s.trendStrength < 55) return 'Weak Trend';
+  return 'Mixed Behaviour';
+}
+
+function deriveStrengthsWeaknesses(scores){
+  const entries = Object.keys(scores).map(k => ({ label: BEHAVIOR_METRIC_LABELS[k], val: scores[k] }));
+  const sorted = [...entries].sort((a,b) => b.val - a.val);
+  const strengths = sorted.filter(e => e.val >= 60).slice(0,3).map(e => `${e.label} (${e.val})`);
+  const weaknesses = sorted.filter(e => e.val <= 40).slice(-3).map(e => `${e.label} (${e.val})`);
+  return {
+    strengths: strengths.length ? strengths : ['No standout strengths yet.'],
+    weaknesses: weaknesses.length ? weaknesses : ['No major weaknesses detected.']
+  };
+}
+
+function deriveDeploymentSuitability(stats, behaviourScore){
+  if(stats.resolved < MIN_SYMBOL_SAMPLE) return `Not yet — only ${stats.resolved} resolved trades (need ${MIN_SYMBOL_SAMPLE}+).`;
+  if(behaviourScore >= 70) return 'Suitable for production.';
+  if(behaviourScore >= 50) return 'Suitable with monitoring.';
+  return 'Not recommended without changes.';
+}
+
+function deriveSuggestedDirection(classification, scores){
+  switch(classification){
+    case 'Strong Trend': return 'Trend-following';
+    case 'Momentum': return 'Trend-following';
+    case 'Spike Behaviour': return 'Breakout';
+    case 'Compression': return 'Compression / Breakout-on-release';
+    case 'Range Market': return 'Mean Reversion';
+    case 'Stable Performer': return scores.avgDuration <= 40 ? 'Scalping' : 'Trend-following';
+    case 'High Noise': return 'Needs Further Research';
+    case 'Low Confidence': return 'Needs Further Research';
+    case 'Weak Trend': return 'Needs Further Research';
+    case 'Experimental': return 'Needs Further Research';
+    default: return 'Needs Further Research';
+  }
+}
+
+function computeAllSymbolProfiles(){
+  const symbols = [...new Set(allRows.map(r => r.symbol).filter(Boolean))];
+  if(symbols.length === 0) return [];
+  const raws = symbols.map(computeSymbolRawMetrics);
+
+  const norm = (key, invert) => normalizeMetric(raws.map(r => ({ symbol: r.symbol, value: r[key] })), invert);
+  const normed = {
+    trendStrength: norm('trendRaw', false),
+    volatility: norm('volatilityRaw', false),
+    consistency: norm('consistencyDeltaRaw', true),
+    tradeStability: norm('durationCVRaw', true),
+    winLossStability: norm('chunkStdDevRaw', true),
+    confidenceStability: norm('confStdDevRaw', true),
+    avgDuration: norm('avgDurationRaw', false),
+    riskEfficiency: norm('riskEfficiencyRaw', false),
+    profitEfficiency: norm('profitEfficiencyRaw', false),
+    signalFrequency: norm('signalFrequencyRaw', false)
+  };
+
+  return raws.map((r, i) => {
+    const scores = {};
+    Object.keys(BEHAVIOR_METRIC_LABELS).forEach(key => {
+      scores[key] = Math.round(normed[key][i].norm * 100);
+    });
+
+    let behaviourScore = 0;
+    Object.keys(BEHAVIOR_SCORE_WEIGHTS).forEach(key => { behaviourScore += scores[key] * BEHAVIOR_SCORE_WEIGHTS[key]; });
+    behaviourScore = Math.round(behaviourScore);
+
+    const classification = classifyBehaviour(r.stats, scores);
+    const { strengths, weaknesses } = deriveStrengthsWeaknesses(scores);
+    const deployment = deriveDeploymentSuitability(r.stats, behaviourScore);
+    const direction = deriveSuggestedDirection(classification, scores);
+
+    return { symbol: r.symbol, stats: r.stats, scores, behaviourScore, classification, strengths, weaknesses, deployment, direction };
+  });
+}
+
+function computeSimilarSymbolGroups(profiles){
+  const n = profiles.length;
+  if(n < 2) return [];
+
+  const dist = (a,b) => Math.sqrt(SIMILARITY_KEYS.reduce((sum,k) => sum + Math.pow(a.scores[k]-b.scores[k], 2), 0));
+  const pairs = [];
+  for(let i=0;i<n;i++) for(let j=i+1;j<n;j++) pairs.push({ i, j, d: dist(profiles[i], profiles[j]) });
+  if(pairs.length === 0) return [];
+
+  // Cluster the closest quarter of all pairwise distances — a dynamic threshold
+  // that adapts to however spread out (or tight) this dataset's symbols are.
+  const sortedDist = pairs.map(p => p.d).sort((a,b) => a-b);
+  const threshold = sortedDist[Math.floor(sortedDist.length * 0.25)];
+
+  const parent = Array.from({length:n}, (_,i) => i);
+  function find(x){ return parent[x] === x ? x : (parent[x] = find(parent[x])); }
+  function union(a,b){ const ra = find(a), rb = find(b); if(ra !== rb) parent[ra] = rb; }
+  pairs.forEach(p => { if(p.d <= threshold) union(p.i, p.j); });
+
+  const groupsMap = {};
+  for(let i=0;i<n;i++){ const r = find(i); (groupsMap[r] = groupsMap[r] || []).push(i); }
+  const groups = Object.values(groupsMap).filter(g => g.length >= 2);
+
+  const overallStats = {};
+  SIMILARITY_KEYS.forEach(k => {
+    const vals = profiles.map(p => p.scores[k]);
+    const mean = vals.reduce((a,b) => a+b, 0) / vals.length;
+    overallStats[k] = { mean, std: stdDevOf(vals) };
+  });
+
+  return groups.map((idxs, gi) => {
+    const members = idxs.map(i => profiles[i]);
+    let bestKey = null, bestRatio = Infinity, bestGroupMean = null;
+    SIMILARITY_KEYS.forEach(k => {
+      const vals = members.map(m => m.scores[k]);
+      const mean = vals.reduce((a,b) => a+b, 0) / vals.length;
+      const std = stdDevOf(vals) || 0;
+      const ratio = overallStats[k].std ? std / overallStats[k].std : 0;
+      if(ratio < bestRatio){ bestRatio = ratio; bestKey = k; bestGroupMean = mean; }
+    });
+
+    const label = BEHAVIOR_METRIC_LABELS[bestKey].toLowerCase();
+    let reason;
+    if(bestGroupMean >= 66) reason = `High ${label}.`;
+    else if(bestGroupMean <= 33) reason = `Low ${label}.`;
+    else reason = `Similar ${label} profile.`;
+
+    return { groupLabel: `Group ${String.fromCharCode(65+gi)}`, symbols: members.map(m => m.symbol), reason };
+  });
+}
+
+function computeOutliers(profiles){
+  const n = profiles.length;
+  if(n < 3) return [];
+
+  const dist = (a,b) => Math.sqrt(SIMILARITY_KEYS.reduce((sum,k) => sum + Math.pow(a.scores[k]-b.scores[k], 2), 0));
+  const avgDistances = profiles.map((p,i) => {
+    let total = 0;
+    profiles.forEach((q,j) => { if(i !== j) total += dist(p,q); });
+    return total / (n-1);
+  });
+
+  const mean = avgDistances.reduce((a,b) => a+b, 0) / n;
+  const std = stdDevOf(avgDistances);
+  if(!std) return [];
+
+  const overallMeans = {};
+  SIMILARITY_KEYS.forEach(k => { overallMeans[k] = profiles.reduce((a,q) => a + q.scores[k], 0) / n; });
+
+  const outliers = [];
+  profiles.forEach((p,i) => {
+    const z = (avgDistances[i] - mean) / std;
+    if(z >= 1.25){
+      const deviations = SIMILARITY_KEYS
+        .map(k => ({ key:k, dev: p.scores[k] - overallMeans[k] }))
+        .sort((a,b) => Math.abs(b.dev) - Math.abs(a.dev));
+      const top = deviations.slice(0,2).map(d =>
+        `${BEHAVIOR_METRIC_LABELS[d.key].toLowerCase()} is ${d.dev >= 0 ? 'far above' : 'far below'} average (${p.scores[d.key]} vs typical ${Math.round(overallMeans[d.key])})`);
+      outliers.push({ symbol: p.symbol, reason: `Stands apart from every other symbol — ${top.join(' and ')}.` });
+    }
+  });
+  return outliers;
+}
+
+function computeLongTermRecommendations(profiles){
+  const recs = [];
+  profiles.forEach(p => {
+    const s = p.scores, stats = p.stats;
+
+    if(stats.resolved < MIN_SYMBOL_SAMPLE){
+      recs.push({
+        priorityScore: 30,
+        recommendation: `Collect more data for ${p.symbol}.`,
+        reason: `Only ${stats.resolved} resolved trades — too few to draw reliable behavioural conclusions.`
+      });
+      return;
+    }
+
+    if(s.volatility >= 65 && s.winLossStability < 40 && s.riskEfficiency < 40){
+      recs.push({
+        priorityScore: 70,
+        recommendation: `Increase SL for ${p.symbol}.`,
+        reason: `High volatility (${s.volatility}) combined with poor win/loss stability (${s.winLossStability}) and weak risk efficiency (${s.riskEfficiency}) suggests stops are getting clipped by noise.`
+      });
+    }
+
+    if(stats.riskReward != null && stats.riskReward > 2 && stats.winRatePct != null && stats.winRatePct < 40){
+      recs.push({
+        priorityScore: 65,
+        recommendation: `Reduce TP for ${p.symbol}.`,
+        reason: `Risk:reward of ${stats.riskReward.toFixed(2)}:1 with only ${fmtPct(stats.winRatePct)} win rate suggests the take-profit target is rarely reached.`
+      });
+    }
+
+    if(p.behaviourScore < 35){
+      recs.push({
+        priorityScore: 80,
+        recommendation: `Candidate for removal: ${p.symbol}.`,
+        reason: `Overall behaviour score of ${p.behaviourScore}/100 (${p.classification}) — persistently weak across most measured metrics.`
+      });
+    }
+
+    if((p.classification === 'Strong Trend' || p.classification === 'Momentum') && stats.resolved >= MIN_SYMBOL_SAMPLE * 1.5){
+      recs.push({
+        priorityScore: 60,
+        recommendation: `Candidate for dedicated strategy: ${p.symbol}.`,
+        reason: `${p.classification} behaviour on a solid sample (${stats.resolved} resolved) — a specialised rule set could outperform the generic strategy here.`
+      });
+    }
+
+    if(p.behaviourScore >= 70 && p.deployment === 'Suitable for production.'){
+      recs.push({
+        priorityScore: 75,
+        recommendation: `Candidate for production: ${p.symbol}.`,
+        reason: `Behaviour score ${p.behaviourScore}/100, classified as ${p.classification} — consistently strong across the measured metrics.`
+      });
+    }
+
+    if(p.classification === 'Mixed Behaviour' && stats.totalSignals >= MIN_SYMBOL_SAMPLE * 2){
+      recs.push({
+        priorityScore: 50,
+        recommendation: `Candidate for AI behaviour modelling: ${p.symbol}.`,
+        reason: `${stats.totalSignals} signals show a pattern too irregular for simple rules to classify cleanly — enough data exists to try a learned model instead.`
+      });
+    }
+  });
+
+  recs.forEach(r => { r.priorityScore = Math.max(0, Math.min(100, Math.round(r.priorityScore))); });
+  recs.sort((a,b) => b.priorityScore - a.priorityScore);
+  return recs.slice(0,6);
+}
+
+function renderBehaviorProfiles(profiles){
+  const wrap = document.getElementById('behaviorProfilesWrap');
+  if(profiles.length === 0){ wrap.innerHTML = '<div class="empty-note">No symbol data loaded yet.</div>'; return; }
+  wrap.innerHTML = profiles.map(p => `
+    <div class="verdict-card">
+      <div class="v-title verdict ${p.behaviourScore >= 70 ? 'adopt' : (p.behaviourScore >= 45 ? 'wait' : 'reject')}">${p.symbol} — ${p.classification} (Behaviour Score ${p.behaviourScore}/100)</div>
+      <div class="v-body">
+        <div class="profile-metrics">${Object.keys(BEHAVIOR_METRIC_LABELS).map(k =>
+          `<span>${BEHAVIOR_METRIC_LABELS[k]}: <b>${p.scores[k]}</b></span>`).join('')}</div>
+        <div><b>Strengths:</b> ${p.strengths.join(', ')}</div>
+        <div><b>Weaknesses:</b> ${p.weaknesses.join(', ')}</div>
+        <div><b>Deployment Suitability:</b> ${p.deployment}</div>
+        <div><b>Suggested Strategy Direction:</b> ${p.direction}</div>
+      </div>
+    </div>`).join('');
+}
+
+function renderSimilarSymbols(profiles){
+  const wrap = document.getElementById('similarSymbolsWrap');
+  const groups = computeSimilarSymbolGroups(profiles);
+  if(groups.length === 0){ wrap.innerHTML = '<div class="empty-note">Not enough distinct symbols with comparable behaviour to form groups yet.</div>'; return; }
+  wrap.innerHTML = groups.map(g => `
+    <div class="verdict-card">
+      <div class="v-title verdict adopt">${g.groupLabel}</div>
+      <div class="v-body">
+        <div>${g.symbols.join(', ')}</div>
+        <div style="margin-top:6px;"><b>Reason:</b> ${g.reason}</div>
+      </div>
+    </div>`).join('');
+}
+
+function renderOutliers(profiles){
+  const wrap = document.getElementById('outliersWrap');
+  const outliers = computeOutliers(profiles);
+  if(outliers.length === 0){ wrap.innerHTML = '<div class="empty-note">No symbol currently stands out as statistically distinct from the rest.</div>'; return; }
+  wrap.innerHTML = outliers.map(o => `
+    <div class="verdict-card">
+      <div class="v-title verdict wait">${o.symbol}</div>
+      <div class="v-body">${o.reason}</div>
+    </div>`).join('');
+}
+
+function renderLongTermRecommendations(profiles){
+  const wrap = document.getElementById('longTermRecsWrap');
+  const recs = computeLongTermRecommendations(profiles);
+  if(recs.length === 0){ wrap.innerHTML = '<div class="empty-note">No long-term recommendations yet — not enough data.</div>'; return; }
+  wrap.innerHTML = recs.map(r => `
+    <div class="verdict-card">
+      <div class="v-title verdict ${r.priorityScore >= 70 ? 'reject' : (r.priorityScore >= 45 ? 'wait' : 'adopt')}">${r.recommendation}</div>
+      <div class="v-body">${r.reason}</div>
+    </div>`).join('');
+}
+
+function renderMarketIntelligence(){
+  const profiles = computeAllSymbolProfiles();
+  renderBehaviorProfiles(profiles);
+  renderSimilarSymbols(profiles);
+  renderOutliers(profiles);
+  renderLongTermRecommendations(profiles);
 }
 
 if(adminSecret){
