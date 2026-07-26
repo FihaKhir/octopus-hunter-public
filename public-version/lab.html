@@ -114,6 +114,11 @@
     <h2>Release Advisor</h2>
     <div id="releaseAdvisorWrap"></div>
   </div>
+
+  <div class="panel">
+    <h2>Next Experiment</h2>
+    <div id="nextExperimentWrap"></div>
+  </div>
 </div>
 
 <script>
@@ -310,6 +315,7 @@ function renderAll(){
   renderSymbolTable();
   renderVerdicts();
   renderReleaseAdvisor();
+  renderNextExperiments();
   document.getElementById('thresholdsNote').innerHTML =
     `Verdict thresholds (disclosed, not hidden logic): a version needs at least <b>${MIN_RESOLVED_SAMPLE} resolved trades</b> before any verdict is given. ` +
     `"Adopt" requires a win-rate improvement of at least <b>${WIN_RATE_MEANINGFUL_DELTA} points</b> AND non-negative expectancy change. ` +
@@ -672,6 +678,194 @@ function renderReleaseAdvisor(){
     </div>`;
 
   wrap.innerHTML = html;
+}
+
+// --- Next Experiment -------------------------------------------------------
+// Analyses every loaded version/symbol/family and proposes what to test next.
+// Nothing here is a fixed string — every recommendation is built from the
+// symbol/family name and numbers actually present in versionStats at render
+// time, using the exact same computeVersionStats() math as the rest of the
+// page (via computeSymbolBreakdown / computeFamilyBreakdown).
+function computeFamilyBreakdown(version){
+  const rows = allRows.filter(r => versionLabel(r) === version);
+  const families = [...new Set(rows.map(r => r.family).filter(Boolean))];
+  const out = {};
+  families.forEach(fam => {
+    out[fam] = computeVersionStats(rows.filter(r => r.family === fam));
+  });
+  return out;
+}
+
+function computeNextExperiments(){
+  const versions = Object.keys(versionStats);
+  if(versions.length === 0) return [];
+
+  // The "focus" version is whichever one is currently collecting the most
+  // signals — i.e. the experiment actively being run right now.
+  const focusVersion = versions.reduce((best, v) =>
+    (!best || versionStats[v].totalSignals > versionStats[best].totalSignals) ? v : best, null);
+
+  const symStats = computeSymbolBreakdown(focusVersion);
+  const famStats = computeFamilyBreakdown(focusVersion);
+  const candidates = [];
+
+  // --- Symbol-level rules --------------------------------------------------
+  Object.keys(symStats).sort().forEach(sym => {
+    const s = symStats[sym];
+    const resolved = s.resolved;
+
+    if(resolved < MIN_SYMBOL_SAMPLE){
+      const needed = MIN_SYMBOL_SAMPLE - resolved;
+      candidates.push({
+        priorityScore: 20 + (resolved / MIN_SYMBOL_SAMPLE) * 25,
+        recommendation: `Collect more data for ${sym}.`,
+        reason: `${sym} has only ${resolved} resolved trade(s) in ${focusVersion} — below the ${MIN_SYMBOL_SAMPLE}-trade minimum needed before any keep/disable or optimization call can be trusted.`,
+        impact: 'Low',
+        sampleSize: `Need ${needed} more resolved trades.`,
+        confidence: 90
+      });
+      return; // no other symbol rule is meaningful without enough data
+    }
+
+    // Has this symbol underperformed in every version with enough of its own data?
+    const qualifying = versions.filter(v => {
+      const vs = versionStats[v].winRateBySymbol[sym];
+      return vs && (vs.wins + vs.losses) >= MIN_SYMBOL_SAMPLE;
+    });
+    const underperformingIn = qualifying.filter(v => {
+      const vs = versionStats[v].winRateBySymbol[sym];
+      return vs.winRatePct != null && vs.winRatePct < SYMBOL_KEEP_WIN_RATE;
+    });
+
+    if(qualifying.length >= 2 && underperformingIn.length === qualifying.length){
+      const gapEffect = Math.min(1, Math.max(0, SYMBOL_KEEP_WIN_RATE - s.winRatePct) / 20);
+      candidates.push({
+        priorityScore: 78 + gapEffect * 12,
+        recommendation: `${sym} consistently underperforms across versions.`,
+        reason: `${sym} sits below the ${SYMBOL_KEEP_WIN_RATE}% win-rate bar in all ${qualifying.length} version(s) with enough data (latest: ${fmtPct(s.winRatePct)} in ${focusVersion}, ${s.wins}W/${s.losses}L).`,
+        impact: gapEffect > 0.6 ? 'High' : 'Medium',
+        sampleSize: 'Sufficient data collected across versions.',
+        confidence: Math.round(60 + gapEffect * 30)
+      });
+    } else if(s.winRatePct != null && s.winRatePct < SYMBOL_KEEP_WIN_RATE){
+      const gap = versionStats[focusVersion].winRatePct - s.winRatePct;
+      const gapEffect = Math.min(1, Math.max(0, gap) / 20);
+      candidates.push({
+        priorityScore: 55 + gapEffect * 20,
+        recommendation: `Disable ${sym} temporarily.`,
+        reason: `${sym} is running at ${fmtPct(s.winRatePct)} win rate in ${focusVersion} (${s.wins}W/${s.losses}L), ${Math.abs(gap).toFixed(1)}pp ${gap >= 0 ? 'below' : 'above'} the version's overall ${fmtPct(versionStats[focusVersion].winRatePct)}.`,
+        impact: gapEffect > 0.6 ? 'High' : (gapEffect > 0.3 ? 'Medium' : 'Low'),
+        sampleSize: 'Sufficient data collected.',
+        confidence: Math.round(50 + gapEffect * 30 + Math.min(15, resolved / 10))
+      });
+    } else if(resolved >= MIN_SYMBOL_SAMPLE * 2 && s.winRatePct != null && s.winRatePct >= SYMBOL_KEEP_WIN_RATE + 10 && (s.expectancy == null || s.expectancy >= 0)){
+      const edge = Math.min(1, (s.winRatePct - SYMBOL_KEEP_WIN_RATE) / 25);
+      candidates.push({
+        priorityScore: 60 + edge * 20,
+        recommendation: `${sym} is stable enough for production.`,
+        reason: `${sym} holds ${fmtPct(s.winRatePct)} win rate over ${resolved} resolved trades (profit factor ${fmtNum(s.profitFactor,2)}) in ${focusVersion} — comfortably above the ${SYMBOL_KEEP_WIN_RATE}% bar on a solid sample.`,
+        impact: edge > 0.6 ? 'High' : 'Medium',
+        sampleSize: 'Sufficient data collected.',
+        confidence: Math.round(65 + edge * 25)
+      });
+    } else if(s.winRatePct != null && s.winRatePct >= 50 && s.riskReward != null && s.riskReward < 1){
+      const edge = Math.min(1, 1 - s.riskReward);
+      candidates.push({
+        priorityScore: 45 + edge * 15,
+        recommendation: `${sym} has enough data for TP optimization.`,
+        reason: `${sym} wins ${fmtPct(s.winRatePct)} of the time over ${resolved} resolved trades, but risk:reward is only ${s.riskReward.toFixed(2)}:1 — the take-profit target may be leaving edge on the table.`,
+        impact: edge > 0.5 ? 'Medium' : 'Low',
+        sampleSize: 'Sufficient data collected.',
+        confidence: Math.round(55 + edge * 20)
+      });
+    }
+  });
+
+  // --- Family-level rules ---------------------------------------------------
+  Object.keys(famStats).sort().forEach(fam => {
+    const f = famStats[fam];
+    if(f.resolved < MIN_RESOLVED_SAMPLE) return; // not enough to reason about the family yet
+
+    const qualifying = versions.filter(v => {
+      const vf = versionStats[v].winRateByFamily[fam];
+      return vf && (vf.wins + vf.losses) >= MIN_RESOLVED_SAMPLE;
+    });
+    const underperformingIn = qualifying.filter(v => {
+      const vf = versionStats[v].winRateByFamily[fam];
+      return vf.winRatePct != null && vf.winRatePct < SYMBOL_KEEP_WIN_RATE;
+    });
+    if(qualifying.length >= 2 && underperformingIn.length === qualifying.length){
+      candidates.push({
+        priorityScore: 75,
+        recommendation: `${fam} consistently underperforms across versions.`,
+        reason: `${fam} sits below the ${SYMBOL_KEEP_WIN_RATE}% win-rate bar in all ${qualifying.length} version(s) with enough family-level data (latest: ${fmtPct(f.winRatePct)} in ${focusVersion}).`,
+        impact: 'High',
+        sampleSize: 'Sufficient data collected across versions.',
+        confidence: 75
+      });
+    }
+
+    // Does confidence actually separate winners from losers in this family?
+    if(f.avgConfidenceWin != null && f.avgConfidenceLoss != null){
+      const gap = f.avgConfidenceWin - f.avgConfidenceLoss;
+      if(gap < 5){
+        candidates.push({
+          priorityScore: 50,
+          recommendation: `Test a confidence-scoring refinement (e.g. RSI weighting) on ${fam}.`,
+          reason: `In ${fam}, average confidence on winners (${fmtNum(f.avgConfidenceWin,1)}) is only ${gap.toFixed(1)} points above losers (${fmtNum(f.avgConfidenceLoss,1)}) — the current confidence signal barely separates winning from losing setups here.`,
+          impact: 'Medium',
+          sampleSize: 'Sufficient data collected.',
+          confidence: Math.round(50 + Math.max(0, 5 - gap) * 5)
+        });
+      }
+    }
+
+    // Structural risk:reward check — hints at stop/target (ATR) sizing.
+    if(f.riskReward != null && f.riskReward < 1 && f.winRatePct != null && f.winRatePct < 60){
+      const edge = Math.min(1, 1 - f.riskReward);
+      candidates.push({
+        priorityScore: 55 + edge * 15,
+        recommendation: `Increase ATR multiplier for ${fam}.`,
+        reason: `${fam} has a risk:reward of only ${f.riskReward.toFixed(2)}:1 against a ${fmtPct(f.winRatePct)} win rate — losses are costing more than wins are paying, a classic sign the stop/target sizing needs a wider ATR multiplier.`,
+        impact: edge > 0.5 ? 'Medium' : 'Low',
+        sampleSize: 'Sufficient data collected.',
+        confidence: Math.round(55 + edge * 20)
+      });
+    }
+  });
+
+  candidates.forEach(c => {
+    c.priorityScore = Math.max(0, Math.min(100, Math.round(c.priorityScore)));
+    c.confidence = Math.max(0, Math.min(100, Math.round(c.confidence)));
+    c.priority = c.priorityScore >= 70 ? 'HIGH' : (c.priorityScore >= 40 ? 'MEDIUM' : 'LOW');
+  });
+
+  candidates.sort((a,b) => b.priorityScore - a.priorityScore);
+  return candidates.slice(0, 5);
+}
+
+function renderNextExperiments(){
+  const wrap = document.getElementById('nextExperimentWrap');
+  const recs = computeNextExperiments();
+
+  if(recs.length === 0){
+    wrap.innerHTML = '<div class="empty-note">Not enough data yet to suggest a next experiment.</div>';
+    return;
+  }
+
+  const priorityCls = p => p === 'HIGH' ? 'reject' : (p === 'MEDIUM' ? 'wait' : 'adopt');
+
+  wrap.innerHTML = recs.map((r, i) => `
+    <div class="verdict-card">
+      <div class="v-title verdict ${priorityCls(r.priority)}">${i+1}. [${r.priority}] ${r.recommendation}</div>
+      <div class="v-body">
+        <div><b>Reason:</b> ${r.reason}</div>
+        <div style="margin-top:6px;"><b>Estimated Impact:</b> ${r.impact}</div>
+        <div><b>Required Sample Size:</b> ${r.sampleSize}</div>
+        <div><b>Estimated Confidence:</b> ${r.confidence}%</div>
+      </div>
+    </div>
+  `).join('');
 }
 
 if(adminSecret){
