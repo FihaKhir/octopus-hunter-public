@@ -17,6 +17,7 @@ const supabase = createClient(
 );
 
 export default async function handler(req, res) {
+  console.log(">>> NEAR MISS HIT <<<", req.method);
   // Enable CORS headers for preflight requests
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
