@@ -631,10 +631,10 @@ let slWarnedKeys = new Set();
 function checkForNewSignals(data){
   const signalList = Array.isArray(data) ? data : (data?.signals || []);
   const activeNow = signalList.filter(s => (s.status || 'active') === 'active');
-  const currentKeys = new Set(activeNow.map(s => s.symbol + ':' + s.sent_at));
+  const currentKeys = new Set(activeNow.map(s => s.symbol + ':' + (s.created_at || s.sent_at)));
   if(!firstPoll && soundEnabled){
     for(const s of activeNow){
-      const key = s.symbol + ':' + s.sent_at;
+      const key = s.symbol + ':' + (s.created_at || s.sent_at);
       if(!seenKeys.has(key)) { playDing(); break; }
     }
   }
@@ -645,7 +645,7 @@ function checkForNewSignals(data){
   if(soundEnabled){
     const nearNow = new Set();
     for(const s of activeNow){
-      const key = s.symbol + ':' + s.sent_at;
+      const key = s.symbol + ':' + (s.created_at || s.sent_at);
       if((s.sl_proximity || 0) >= 70){
         nearNow.add(key);
         if(!slWarnedKeys.has(key)) playSlAlert();
@@ -656,10 +656,29 @@ function checkForNewSignals(data){
 }
 
 function elapsedSecondsSince(s){
-  if (!s || !s.sent_at) return 0;
-  const created = new Date(s.sent_at).getTime();
-  if (isNaN(created)) return 0;
-  return Math.max(0, Math.floor((Date.now() - created) / 1000));
+  if (!s) return 0;
+  const rawTs = s.created_at || s.sent_at;
+  if (!rawTs) return 0;
+
+  let createdMs;
+  if (typeof rawTs === 'number') {
+    // Convert Unix timestamp in seconds to milliseconds if necessary
+    createdMs = rawTs < 1e11 ? rawTs * 1000 : rawTs;
+  } else if (typeof rawTs === 'string') {
+    if (!isNaN(rawTs) && !isNaN(parseFloat(rawTs))) {
+      const num = Number(rawTs);
+      createdMs = num < 1e11 ? num * 1000 : num;
+    } else {
+      // Normalize SQL datetime string format ("YYYY-MM-DD HH:MM:SS") to standard ISO format
+      const isoStr = rawTs.includes(' ') && !rawTs.includes('T') ? rawTs.replace(' ', 'T') : rawTs;
+      createdMs = new Date(isoStr).getTime();
+    }
+  } else {
+    createdMs = new Date(rawTs).getTime();
+  }
+
+  if (isNaN(createdMs)) return 0;
+  return Math.max(0, Math.floor((Date.now() - createdMs) / 1000));
 }
 
 function formatAgo(sec){
