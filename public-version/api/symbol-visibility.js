@@ -10,6 +10,31 @@
 
 import { createClient } from '@supabase/supabase-js';
 
+const SUPPORTED_SYMBOLS = [
+  'BreakX 600',
+  'BreakX 1200',
+  'BreakX 1800',
+  'GainX 400',
+  'GainX 600',
+  'GainX 800',
+  'GainX 999',
+  'GainX 1200',
+  'PainX 400',
+  'PainX 600',
+  'PainX 800',
+  'PainX 999',
+  'PainX 1200',
+  'SwitchX 600',
+  'SwitchX 1200',
+  'SwitchX 1800',
+  'TrendX 600',
+  'TrendX 1200',
+  'TrendX 1800',
+  'FX Volatility 20',
+  'FX Volatility 40',
+  'FX Volatility 60'
+];
+
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
@@ -47,8 +72,11 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: configError.message });
     }
 
+    const dbSymbols = (symbolRows || []).map(r => r.symbol);
+    const combinedSymbols = Array.from(new Set([...SUPPORTED_SYMBOLS, ...dbSymbols])).sort();
+
     return res.status(200).json({
-      all_symbols: symbolRows.map(r => r.symbol),
+      all_symbols: combinedSymbols,
       hidden_symbols: configRow?.hidden_symbols || []
     });
   }
