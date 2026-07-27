@@ -67,13 +67,18 @@ export default async function handler(req, res) {
   try {
     const { data: configRow, error: configError } = await supabase
       .from('display_config')
-      .select('hidden_symbols')
+      .select('hidden_symbols, maintenance_mode')
       .eq('id', 1)
       .maybeSingle();
     if (configError) {
       console.error('display_config read error (failing open, showing all symbols):', configError);
-    } else if (configRow?.hidden_symbols) {
-      hiddenSymbols = configRow.hidden_symbols;
+    } else {
+      if (configRow?.maintenance_mode) {
+        return res.status(200).json({ maintenance: true, signals: [] });
+      }
+      if (configRow?.hidden_symbols) {
+        hiddenSymbols = configRow.hidden_symbols;
+      }
     }
   } catch (err) {
     console.error('display_config read failed (failing open, showing all symbols):', err);
