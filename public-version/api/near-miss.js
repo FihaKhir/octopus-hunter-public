@@ -17,6 +17,17 @@ const supabase = createClient(
 );
 
 export default async function handler(req, res) {
+  // Enable CORS headers for preflight requests
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  // Handle CORS preflight OPTIONS request (fixes HTTP 405 error)
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  // Reject non-POST requests
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'method_not_allowed' });
   }
@@ -26,14 +37,26 @@ export default async function handler(req, res) {
       symbol, direction, confidence,
       primary_score, compression_score, velocity_score, rsi_value,
       strategy_version, logged_at
-    } = req.body;
+    } = req.body || {};
 
     if (!symbol) {
       return res.status(400).json({ error: 'Missing required field: symbol' });
     }
 
-    const row = { symbol, direction, confidence, primary_score, compression_score, velocity_score, strategy_version, logged_at };
-    if (rsi_value !== undefined) row.rsi_value = rsi_value;
+    const row = {
+      symbol,
+      direction,
+      confidence,
+      primary_score,
+      compression_score,
+      velocity_score,
+      strategy_version,
+      logged_at
+    };
+
+    if (rsi_value !== undefined) {
+      row.rsi_value = rsi_value;
+    }
 
     const { error } = await supabase.from('near_misses').insert(row);
 
