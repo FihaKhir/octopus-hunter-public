@@ -30,9 +30,9 @@ const SUPPORTED_SYMBOLS = [
   'TrendX 600',
   'TrendX 1200',
   'TrendX 1800',
-  'FX Volatility 20',
-  'FX Volatility 40',
-  'FX Volatility 60'
+  'FX Vol 20',
+  'FX Vol 40',
+  'FX Vol 60'
 ];
 
 const supabase = createClient(
