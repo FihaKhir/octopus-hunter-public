@@ -143,6 +143,10 @@
     font-family:'IBM Plex Mono',monospace; font-size:12px; padding:6px 12px;
     border-radius:6px; cursor:pointer;
   }
+  select.pill-btn option{
+    background:var(--panel);
+    color:var(--text);
+  }
   .clock{
     font-family:'IBM Plex Mono',monospace;
     font-size:13px;
@@ -420,6 +424,7 @@
 
 <header>
   <div class="top-controls" style="justify-content:center;">
+    <select id="tzSelect" class="pill-btn" onchange="setTimezone(this.value)" style="outline:none; cursor:pointer;"></select>
     <button id="langBtn" class="pill-btn" onclick="toggleLang()">🌐 العربية</button>
     <button id="soundToggle" class="pill-btn" onclick="toggleSound()">🔕 Enable Sound</button>
     <button id="symbolsBtn" class="pill-btn" onclick="openSymbolsModal()">📋 Tracked Symbols</button>
@@ -483,6 +488,109 @@ const TRACKED_SYMBOLS = [
   'FX Vol 60'
 ];
 
+let trackedSymbolSet = new Set(TRACKED_SYMBOLS);
+
+function renderTrackedChips(){
+  const chipsContainer = document.getElementById('chips');
+  if(!chipsContainer) return;
+  const sorted = Array.from(trackedSymbolSet).sort();
+  chipsContainer.innerHTML = sorted.map(s => `<span class="chip ltr">${s}</span>`).join('');
+}
+
+// --- Timezone Management ------------------------------------------------
+const TZ_STORAGE_KEY = 'octopusHunterTimezone';
+const TIMEZONE_OPTIONS = [
+  'UTC',
+  'Africa/Algiers',
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'America/Sao_Paulo',
+  'Asia/Dubai',
+  'Asia/Riyadh',
+  'Asia/Kolkata',
+  'Asia/Bangkok',
+  'Asia/Singapore',
+  'Asia/Tokyo',
+  'Australia/Sydney',
+  'Europe/London',
+  'Europe/Paris',
+  'Europe/Berlin',
+  'Europe/Madrid',
+  'Europe/Moscow'
+];
+
+function getDetectedTimezone(){
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch(e) {
+    return 'UTC';
+  }
+}
+
+function getTimezone(){
+  return localStorage.getItem(TZ_STORAGE_KEY) || getDetectedTimezone();
+}
+
+function setTimezone(tz){
+  localStorage.setItem(TZ_STORAGE_KEY, tz);
+  updateClock();
+  if(typeof renderGrid === 'function' && typeof lastData !== 'undefined') {
+    renderGrid(lastData);
+  }
+}
+
+function initTimezoneSelect(){
+  const tzSelect = document.getElementById('tzSelect');
+  if(!tzSelect) return;
+  const currentTz = getTimezone();
+  const detected = getDetectedTimezone();
+
+  let list = [...TIMEZONE_OPTIONS];
+  if(!list.includes(detected)) list.push(detected);
+  if(!list.includes(currentTz)) list.push(currentTz);
+  list.sort();
+
+  tzSelect.innerHTML = list.map(tz =>
+    `<option value="${tz}" ${tz === currentTz ? 'selected' : ''}>${tz}</option>`
+  ).join('');
+}
+
+function fmtTime(rawTs){
+  if (!rawTs) return '—';
+  let date;
+  if (typeof rawTs === 'number') {
+    date = new Date(rawTs < 1e11 ? rawTs * 1000 : rawTs);
+  } else if (typeof rawTs === 'string') {
+    if (!isNaN(rawTs) && !isNaN(parseFloat(rawTs))) {
+      const num = Number(rawTs);
+      date = new Date(num < 1e11 ? num * 1000 : num);
+    } else {
+      const isoStr = rawTs.includes(' ') && !rawTs.includes('T') ? rawTs.replace(' ', 'T') : rawTs;
+      date = new Date(isoStr);
+    }
+  } else {
+    date = new Date(rawTs);
+  }
+  if (isNaN(date.getTime())) return '—';
+
+  try {
+    return new Intl.DateTimeFormat('en-GB', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+      timeZone: getTimezone()
+    }).format(date).replace(',', '');
+  } catch(e) {
+    return date.toLocaleString();
+  }
+}
+
 // --- i18n ------------------------------------------------------------
 const I18N = {
   en: {
@@ -493,6 +601,7 @@ const I18N = {
     tracked: 'Tracked symbols',
     confidence: 'composite confidence',
     entry: 'Entry', stopLoss: 'Stop Loss', takeProfit: 'Take Profit',
+    opened: 'Opened', closed: 'Closed',
     timeframe: 'Timeframe', family: 'family', ticks: 'ticks',
     compression: 'Compression', velocity: 'Velocity', familySignal: 'Family signal',
     up: 'up', down: 'down', tpHit: 'TP HIT', slHit: 'SL HIT', confirmed: 'confirmed',
@@ -517,6 +626,7 @@ const I18N = {
     tracked: 'الرموز المتابَعة',
     confidence: 'مستوى الثقة المركب',
     entry: 'الدخول', stopLoss: 'وقف الخسارة', takeProfit: 'جني الأرباح',
+    opened: 'تاريخ الفتح', closed: 'تاريخ الإغلاق',
     timeframe: 'الإطار الزمني', family: 'العائلة', ticks: 'تكة',
     compression: 'الانضغاط', velocity: 'السرعة', familySignal: 'إشارة العائلة',
     up: 'صعود', down: 'هبوط', tpHit: 'تحقق الهدف', slHit: 'تفعيل الوقف', confirmed: 'مؤكد',
@@ -570,8 +680,8 @@ function applyStaticText(){
   if(banner.classList.contains('show')) banner.textContent = t('maintenanceBanner');
 }
 
-document.getElementById('chips').innerHTML =
-  TRACKED_SYMBOLS.map(s => `<span class="chip ltr">${s}</span>`).join('');
+initTimezoneSelect();
+renderTrackedChips();
 
 // --- Sound notifications ----------------------------------------------
 let soundEnabled = false;
@@ -610,7 +720,6 @@ function playDing(){
 }
 
 function playSlAlert(){
-  // A lower, urgent double-beep — deliberately distinct from the "new signal" ding
   if(!audioCtx) return;
   [0, 0.22].forEach(delay => {
     const osc = audioCtx.createOscillator();
@@ -641,7 +750,6 @@ function checkForNewSignals(data){
   firstPoll = false;
   seenKeys = currentKeys;
 
-  // SL-proximity alert: beep once when a signal first crosses into the warning zone
   if(soundEnabled){
     const nearNow = new Set();
     for(const s of activeNow){
@@ -662,14 +770,12 @@ function elapsedSecondsSince(s){
 
   let createdMs;
   if (typeof rawTs === 'number') {
-    // Convert Unix timestamp in seconds to milliseconds if necessary
     createdMs = rawTs < 1e11 ? rawTs * 1000 : rawTs;
   } else if (typeof rawTs === 'string') {
     if (!isNaN(rawTs) && !isNaN(parseFloat(rawTs))) {
       const num = Number(rawTs);
       createdMs = num < 1e11 ? num * 1000 : num;
     } else {
-      // Normalize SQL datetime string format ("YYYY-MM-DD HH:MM:SS") to standard ISO format
       const isoStr = rawTs.includes(' ') && !rawTs.includes('T') ? rawTs.replace(' ', 'T') : rawTs;
       createdMs = new Date(isoStr).getTime();
     }
@@ -764,7 +870,6 @@ async function checkStoredCode(){
   }
 }
 
-
 // --- Rendering ----------------------------------------------------------
 function gaugeSVG(confidence, color){
   const r = 30, c = 2*Math.PI*r;
@@ -812,6 +917,14 @@ function renderGrid(data){
   grid.style.display = 'grid';
   const signalList = Array.isArray(data) ? data : (data?.signals || []);
   lastData = data;
+
+  // Auto-register any new symbols returned by api/latest.js in the symbols chip list
+  signalList.forEach(s => {
+    if(s.symbol && !trackedSymbolSet.has(s.symbol)){
+      trackedSymbolSet.add(s.symbol);
+      renderTrackedChips();
+    }
+  });
 
   const visible = signalList.filter(isVisible);
 
@@ -874,6 +987,9 @@ function openDetail(i){
 
   const countdownHtml = `<div class="countdown-big ltr ${nearSL ? 'urgent' : ''}">${nearSL ? '⚠ ' + t('nearSL') + ' (' + Math.round(s.sl_proximity) + '%) · ' : ''}${formatAgo(elapsedSecondsSince(s))}</div>`;
 
+  const openedTimeStr = fmtTime(s.created_at || s.sent_at);
+  const closedTimeStr = s.hit_time ? fmtTime(s.hit_time) : null;
+
   panel.innerHTML = `
     <div class="panel-head">
       <div>
@@ -912,6 +1028,10 @@ function openDetail(i){
       <span class="ltr">${s.family || ''} ${t('family')}${s.ticks_since_jump !== undefined && s.expected_gap_ticks ? ' · ' + s.ticks_since_jump + '/' + s.expected_gap_ticks + ' ' + t('ticks') : ''}</span>
       <span class="ltr">${t('timeframe')}: ${s.timeframe || '—'}</span>
     </div>
+    <div class="meta-row">
+      <span class="ltr">${t('opened')}: ${openedTimeStr}</span>
+      ${closedTimeStr ? `<span class="ltr">${t('closed')}: ${closedTimeStr}</span>` : ''}
+    </div>
 
     <div class="components">
       ${compRow(t('compression'), s.compression)}
@@ -945,12 +1065,11 @@ function closeSymbolsModal(){
 }
 
 async function poll(){
-  if(gateOpen || !accessCode) return; // don't fetch signal data while the gate is up
+  if(gateOpen || !accessCode) return;
   checkHeartbeat();
   try{
     const res = await fetch(API_URL + '?code=' + encodeURIComponent(accessCode));
     if(res.status === 401){
-      // Code expired or was revoked mid-session — kick back to the gate
       localStorage.removeItem(CODE_STORAGE_KEY);
       accessCode = null;
       showGate('gateErrorExpired');
@@ -977,19 +1096,30 @@ async function checkHeartbeat(){
     }
     renderGrid(lastData || []);
   }catch(e){
-    // If the heartbeat check itself fails, don't flip the banner on a fluke —
-    // just leave whatever state it was already in.
   }
 }
 
 function updateClock(){
-  document.getElementById('clock').textContent = new Date().toUTCString().slice(17,25) + ' UTC';
+  const tz = getTimezone();
+  const now = new Date();
+  try {
+    const timeStr = new Intl.DateTimeFormat('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+      timeZone: tz
+    }).format(now);
+    document.getElementById('clock').textContent = `${timeStr} (${tz})`;
+  } catch(e) {
+    document.getElementById('clock').textContent = now.toUTCString().slice(17,25) + ' UTC';
+  }
 }
 
 applyStaticText();
 checkStoredCode();
 setInterval(poll, POLL_MS);
-setInterval(() => { if(!gateOpen) renderGrid(lastData); }, 1000); // keep the countdown ticking every second between polls
+setInterval(() => { if(!gateOpen) renderGrid(lastData); }, 1000);
 updateClock();
 setInterval(updateClock, 1000);
 </script>
