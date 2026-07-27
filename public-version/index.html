@@ -629,7 +629,8 @@ function playSlAlert(){
 let slWarnedKeys = new Set();
 
 function checkForNewSignals(data){
-  const activeNow = (data || []).filter(s => (s.status || 'active') === 'active');
+  const signalList = Array.isArray(data) ? data : (data?.signals || []);
+  const activeNow = signalList.filter(s => (s.status || 'active') === 'active');
   const currentKeys = new Set(activeNow.map(s => s.symbol + ':' + s.sent_at));
   if(!firstPoll && soundEnabled){
     for(const s of activeNow){
@@ -654,64 +655,11 @@ function checkForNewSignals(data){
   }
 }
 
-// --- Client-anchored timing (immune to broker clock drift AND page refresh) --
-// The broker's server clock can run ahead of real time, so instead of
-// trusting the signal's own timestamp for "how long ago", we stamp the
-// moment OUR browser first sees each signal and count from there. This is
-// saved to localStorage so refreshing the page doesn't reset the clock.
-const ANCHOR_STORAGE_KEY = 'octopusHunterDevAnchors';
-let firstSeenAt = {};
-try{
-  firstSeenAt = JSON.parse(localStorage.getItem(ANCHOR_STORAGE_KEY) || '{}');
-}catch(e){
-  firstSeenAt = {};
-}
-
-// Same clock-skew problem, second instance: hit_time (from the EA's
-// TimeCurrent()) was being compared directly against Date.now() to decide
-// when a closed card should disappear. When the broker clock runs ahead of
-// real UTC, that comparison stays "recent" for as long as the skew lasts —
-// sometimes hours — so cards lingered well past CLOSED_VISIBLE_MS. Fixed
-// the same way as firstSeenAt above: anchor to the moment THIS browser
-// first sees the signal as closed, not to the broker's own timestamp.
-const CLOSED_ANCHOR_STORAGE_KEY = 'octopusHunterDevClosedAnchors';
-let closedSeenAt = {};
-try{
-  closedSeenAt = JSON.parse(localStorage.getItem(CLOSED_ANCHOR_STORAGE_KEY) || '{}');
-}catch(e){
-  closedSeenAt = {};
-}
-
-function anchorKey(s){ return s.symbol + ':' + s.sent_at; }
-
-function ensureAnchors(data){
-  const liveKeys = new Set();
-  let changed = false;
-  for(const s of (data || [])){
-    const key = anchorKey(s);
-    liveKeys.add(key);
-    if(!(key in firstSeenAt)) { firstSeenAt[key] = Date.now(); changed = true; }
-
-    const status = s.status || 'active';
-    if(status !== 'active' && !(key in closedSeenAt)) { closedSeenAt[key] = Date.now(); changed = true; }
-  }
-  // prune old anchors no longer present, so this doesn't grow forever
-  for(const key of Object.keys(firstSeenAt)){
-    if(!liveKeys.has(key)) { delete firstSeenAt[key]; changed = true; }
-  }
-  for(const key of Object.keys(closedSeenAt)){
-    if(!liveKeys.has(key)) { delete closedSeenAt[key]; changed = true; }
-  }
-  if(changed){
-    try{
-      localStorage.setItem(ANCHOR_STORAGE_KEY, JSON.stringify(firstSeenAt));
-      localStorage.setItem(CLOSED_ANCHOR_STORAGE_KEY, JSON.stringify(closedSeenAt));
-    }catch(e){}
-  }
-}
-
 function elapsedSecondsSince(s){
-  return Math.floor((Date.now() - firstSeenAt[anchorKey(s)]) / 1000);
+  if (!s || !s.sent_at) return 0;
+  const created = new Date(s.sent_at).getTime();
+  if (isNaN(created)) return 0;
+  return Math.max(0, Math.floor((Date.now() - created) / 1000));
 }
 
 function formatAgo(sec){
@@ -819,22 +767,34 @@ function confirmBadge(confirmations){
 
 function isVisible(s){
   const status = s.status || 'active';
-  if(status === 'active') return true; // no more time-based expiry — only a real TP/SL hit removes a card now
-  const closedAt = closedSeenAt[anchorKey(s)];
-  if(!closedAt) return true; // just resolved, anchored this same render pass — show it
-  const ageMs = Date.now() - closedAt;
-  return ageMs < CLOSED_VISIBLE_MS;
+  return status === 'active';
 }
 
 let lastData = [];
 
 function renderGrid(data){
-  lastData = data;
-  ensureAnchors(data);
+  if (data && data.maintenance) {
+    const banner = document.getElementById('maintenanceBanner');
+    banner.textContent = t('maintenanceBanner');
+    banner.classList.add('show');
+  }
 
+  const isMaintenance = document.getElementById('maintenanceBanner').classList.contains('show');
   const grid = document.getElementById('grid');
   const empty = document.getElementById('empty');
-  const visible = (data || []).filter(isVisible);
+
+  if (isMaintenance) {
+    grid.innerHTML = '';
+    grid.style.display = 'none';
+    empty.style.display = 'none';
+    return;
+  }
+
+  grid.style.display = 'grid';
+  const signalList = Array.isArray(data) ? data : (data?.signals || []);
+  lastData = data;
+
+  const visible = signalList.filter(isVisible);
 
   if(visible.length === 0){
     grid.innerHTML = '';
@@ -990,12 +950,13 @@ async function checkHeartbeat(){
     const res = await fetch('/api/heartbeat');
     const data = await res.json();
     const banner = document.getElementById('maintenanceBanner');
-    if(!data.online){
+    if(!data.online || data.maintenance){
       banner.textContent = t('maintenanceBanner');
       banner.classList.add('show');
     } else {
       banner.classList.remove('show');
     }
+    renderGrid(lastData || []);
   }catch(e){
     // If the heartbeat check itself fails, don't flip the banner on a fluke —
     // just leave whatever state it was already in.
