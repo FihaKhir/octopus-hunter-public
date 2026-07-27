@@ -99,6 +99,7 @@ export default async function handler(req, res) {
     status: row.status,
     hit_time: row.hit_time,
     sent_at: row.sent_at,
+    created_at: row.created_at || row.sent_at,
     bar_time: row.bar_time,
     timeframe: row.timeframe,
     family: row.family,
