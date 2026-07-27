@@ -30,6 +30,10 @@
     font-family:'IBM Plex Mono',monospace; font-size:12px; padding:8px 14px;
     border-radius:6px; cursor:pointer; text-decoration:none; display:inline-block;
   }
+  select.nav-btn option{
+    background:var(--panel);
+    color:var(--text);
+  }
   .nav-btn:hover{ border-color:var(--accent); }
   .panel{ background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:20px; margin-bottom:20px; }
   label{ font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em; display:block; margin-bottom:6px; }
@@ -79,7 +83,8 @@
 <div class="wrap" id="panelWrap" style="display:none;">
   <div class="page-head">
     <h1 id="pageTitle" data-i18n="pageTitle">📊 Octopus Hunter — Performance (Public)</h1>
-    <div style="display:flex; gap:10px;">
+    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+      <select id="tzSelect" class="nav-btn" onchange="setTimezone(this.value)" style="outline:none; cursor:pointer;"></select>
       <button class="nav-btn" onclick="toggleLang()" id="langBtn" data-i18n="langBtn">🌐 العربية</button>
       <a class="nav-btn" href="/admin.html" id="adminNavBtn" data-i18n="adminNavBtn">⚙️ Admin</a>
       <a class="nav-btn" href="/lab.html">🧪 Strategy Lab</a>
@@ -134,11 +139,6 @@
         <label data-i18n="filterFamily">Family</label>
         <select id="familyFilter" onchange="renderAll()">
           <option value="" data-i18n="optionAll">All</option>
-          <option value="GainX">GainX</option>
-          <option value="PainX">PainX</option>
-          <option value="SwitchX">SwitchX</option>
-          <option value="BreakX">BreakX</option>
-          <option value="TrendX">TrendX</option>
         </select>
       </div>
       <div>
@@ -194,14 +194,64 @@ let timeRangeHours = null; // null = all time
 let queryWindowFrom = null; // unix seconds — set when a time-range button is active
 let queryWindowTo = null;   // unix seconds — set when a time-range button is active
 
+// --- Timezone Management ------------------------------------------------
+const TZ_STORAGE_KEY = 'octopusHunterTimezone';
+const TIMEZONE_OPTIONS = [
+  'UTC',
+  'Africa/Algiers',
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'America/Sao_Paulo',
+  'Asia/Dubai',
+  'Asia/Riyadh',
+  'Asia/Kolkata',
+  'Asia/Bangkok',
+  'Asia/Singapore',
+  'Asia/Tokyo',
+  'Australia/Sydney',
+  'Europe/London',
+  'Europe/Paris',
+  'Europe/Berlin',
+  'Europe/Madrid',
+  'Europe/Moscow'
+];
+
+function getDetectedTimezone(){
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch(e) {
+    return 'UTC';
+  }
+}
+
+function getTimezone(){
+  return localStorage.getItem(TZ_STORAGE_KEY) || getDetectedTimezone();
+}
+
+function setTimezone(tz){
+  localStorage.setItem(TZ_STORAGE_KEY, tz);
+  if(allRows.length) renderAll();
+}
+
+function initTimezoneSelect(){
+  const tzSelect = document.getElementById('tzSelect');
+  if(!tzSelect) return;
+  const currentTz = getTimezone();
+  const detected = getDetectedTimezone();
+
+  let list = [...TIMEZONE_OPTIONS];
+  if(!list.includes(detected)) list.push(detected);
+  if(!list.includes(currentTz)) list.push(currentTz);
+  list.sort();
+
+  tzSelect.innerHTML = list.map(tz =>
+    `<option value="${tz}" ${tz === currentTz ? 'selected' : ''}>${tz}</option>`
+  ).join('');
+}
+
 // --- i18n ---------------------------------------------------------------
-// Mirrors the exact pattern already used on index.html (I18N dict, t(),
-// toggleLang(), applyStaticText()) for consistency across the two pages.
-// IMPORTANT: only visible label text lives here. Symbol names, strategy-
-// version tags, and the underlying values used for filtering (outcome
-// codes, family codes) are never translated and never touched by this —
-// they're identifiers, not UI copy, exactly like index.html already
-// treats symbol names. This keeps localization purely cosmetic.
 const I18N = {
   en: {
     docTitle: 'Octopus Hunter — Performance',
@@ -288,7 +338,7 @@ function toggleLang(){
   html.dir = (currentLang === 'ar') ? 'rtl' : 'ltr';
   html.lang = currentLang;
   applyStaticText();
-  if(allRows.length) renderAll(); // re-render dynamic content (stats/table/chart labels) in the new language
+  if(allRows.length) renderAll();
 }
 
 function applyStaticText(){
@@ -297,6 +347,7 @@ function applyStaticText(){
   document.getElementById('adminSecretInput').placeholder = t('adminPasswordPlaceholder');
 }
 applyStaticText();
+initTimezoneSelect();
 
 function unlockAdmin(){
   const val = document.getElementById('adminSecretInput').value.trim();
@@ -325,10 +376,24 @@ function fmtPrice(v){
 
 function fmtTime(unixSeconds){
   if(!unixSeconds) return '—';
-  return new Date(unixSeconds * 1000).toLocaleString();
+  const date = new Date(unixSeconds < 1e11 ? unixSeconds * 1000 : unixSeconds);
+  if(isNaN(date.getTime())) return '—';
+  try {
+    return new Intl.DateTimeFormat('en-GB', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+      timeZone: getTimezone()
+    }).format(date).replace(',', '');
+  } catch(e) {
+    return date.toLocaleString();
+  }
 }
 
-// Format duration in seconds to human-readable format (e.g., "1h 23m 45s")
 function fmtDuration(seconds){
   if(seconds === null || seconds === undefined) return '—';
   const s = Math.floor(seconds);
@@ -340,7 +405,6 @@ function fmtDuration(seconds){
   return `${secs}s`;
 }
 
-// Format percentage value (handles null, null-like values)
 function fmtPercent(v){
   if(v === null || v === undefined) return '—';
   return Number(v).toFixed(2) + '%';
@@ -365,12 +429,13 @@ async function loadHistory(){
     showTruncationWarning(payload.truncated);
     populateVersionFilter();
     populateSymbolFilter();
+    populateFamilyFilter();
     renderAll();
     return true;
   }catch(e){
     console.error("loadHistory failed:", e);
     return false;
-}
+  }
 }
 
 function showTruncationWarning(truncated){
@@ -395,11 +460,6 @@ function setTimeRange(hours, btnEl){
   loadHistory();
 }
 
-// opened_at is unix seconds, as sent by the EA (sent_at). This remains as a
-// client-side safety net, but the real filtering now happens server-side
-// via loadHistory()'s since= param — see api/history.js. Uses the same
-// queryWindowFrom stored at fetch time so this never drifts from what was
-// actually requested.
 function withinTimeRange(row){
   if(queryWindowFrom === null) return true;
   if(!row.opened_at) return false;
@@ -420,9 +480,6 @@ function filteredRows(){
   );
 }
 
-// Rows scoped by Family/Symbol/Outcome/Time only — used for the
-// version-comparison table, which needs every version visible side by side
-// regardless of which single version the main table below is filtered to.
 function familyOutcomeFilteredRows(){
   const fam = document.getElementById('familyFilter')?.value;
   const sym = document.getElementById('symbolFilter')?.value;
@@ -435,28 +492,37 @@ function familyOutcomeFilteredRows(){
   );
 }
 
-// Signals sent before strategy_version tracking was deployed have no value
-// for this field — labeled as a real, explained version rather than a
-// vague "(untagged)" placeholder.
 const LEGACY_VERSION_LABEL = 'v0_legacy (pre-tracking)';
 function versionLabel(row){
   return row.strategy_version || LEGACY_VERSION_LABEL;
 }
 
+function populateFamilyFilter(){
+  const select = document.getElementById('familyFilter');
+  if(!select) return;
+  const current = select.value;
+  const families = [...new Set(allRows.map(r => r.family).filter(Boolean))].sort();
+  select.innerHTML = `<option value="">${t('optionAll')}</option>` +
+    families.map(f => `<option value="${f}">${f}</option>`).join('');
+  if(families.includes(current)) select.value = current;
+}
+
 function populateVersionFilter(){
   const select = document.getElementById('versionFilter');
+  if(!select) return;
   const current = select.value;
   const versions = [...new Set(allRows.map(versionLabel))].sort();
-  select.innerHTML = '<option value="">All</option>' +
+  select.innerHTML = `<option value="">${t('optionAll')}</option>` +
     versions.map(v => `<option value="${v}">${v}</option>`).join('');
   if(versions.includes(current)) select.value = current;
 }
 
 function populateSymbolFilter(){
   const select = document.getElementById('symbolFilter');
+  if(!select) return;
   const current = select.value;
   const symbols = [...new Set(allRows.map(r => r.symbol).filter(Boolean))].sort();
-  select.innerHTML = '<option value="">All</option>' +
+  select.innerHTML = `<option value="">${t('optionAll')}</option>` +
     symbols.map(s => `<option value="${s}">${s}</option>`).join('');
   if(symbols.includes(current)) select.value = current;
 }
@@ -481,11 +547,6 @@ function renderVersionCompare(){
     const winRate = resolved > 0 ? ((wins / resolved) * 100).toFixed(1) + '%' : '—';
 
     const openedTimes = vRows.map(r => r.opened_at).filter(Boolean);
-    // When a time-range button is active, From/To reflect the actual
-    // requested window (e.g. exactly 1h apart) so every version row shows
-    // the same, consistent boundary — not just whenever that version's
-    // first/last signal happened to land within it. In "All time" mode
-    // there's no fixed window, so this falls back to the real observed span.
     const from = queryWindowFrom !== null ? fmtTime(queryWindowFrom)
                : (openedTimes.length ? fmtTime(Math.min(...openedTimes)) : '—');
     const to = queryWindowTo !== null ? fmtTime(queryWindowTo)
@@ -573,9 +634,6 @@ function renderChart(rows){
   `;
 }
 
-// Presentational only — maps the raw outcome code (used everywhere else for
-// filtering/comparison) to translated badge text. The code itself never
-// changes based on language.
 function outcomeBadgeLabel(outcome){
   if(outcome === 'win') return t('badgeWin');
   if(outcome === 'loss') return t('badgeLoss');
@@ -618,10 +676,6 @@ function renderTable(rows){
 }
 
 // --- CSV export ----------------------------------------------------------
-// Exports exactly what's currently on screen: filteredRows() is the same
-// data source renderTable() uses, so this always respects the Family/
-// Symbol/Outcome/Strategy-version filters AND the active time range.
-// Client-side only — no backend call, no new API.
 function csvEscape(value){
   const s = (value === null || value === undefined) ? '' : String(value);
   if(/[",\r\n]/.test(s)){
