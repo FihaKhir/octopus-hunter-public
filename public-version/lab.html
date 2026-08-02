@@ -1596,39 +1596,100 @@ function toggleAllExpanded(){
 /* TradeJournal, SymbolRanking).                                         */
 
 /* ============================================================
+   API CONTRACT — BehaviourData
+   ------------------------------------------------------------
+   This is the ONE schema every Behaviour Explorer renderer is
+   allowed to consume. loadBehaviourData(symbol) is the ONE
+   function allowed to produce it. Nothing downstream of
+   loadBehaviourData() ever reads a raw generator/mock/API
+   response directly — it always reads a validated BehaviourData
+   object, guaranteed to have every field below present (set to
+   `null` when the underlying source didn't provide it).
+   ============================================================ */
+
+/**
+ * @typedef {'WIN'|'LOSS'} BehaviourResult
+ */
+
+/**
+ * @typedef {Object} BehaviourSummary
+ * @property {string|null} symbol       - Instrument symbol, e.g. "GainX 800".
+ * @property {string|null} profileId    - Unique id of the underlying Behaviour Profile record.
+ * @property {string|null} date         - ISO date (YYYY-MM-DD) the profile/signal refers to.
+ * @property {string|null} time         - Time of day (HH:MM:SS) the profile/signal refers to.
+ * @property {string|null} timeframe    - Chart timeframe the profile was built on, e.g. "M15".
+ * @property {BehaviourResult|null} result - Outcome label for the reference signal.
+ * @property {number|null} confidence   - 0-100 overall confidence score.
+ * @property {string|null} session      - Trading session, e.g. "London".
+ * @property {string|null} weekday      - Day of week, e.g. "Tuesday".
+ */
+
+/**
+ * @typedef {Object} BehaviourDna
+ * @property {number|null} primaryScore     - 0-100 primary trend/behaviour strength.
+ * @property {number|null} compressionScore - 0-100 range-compression score.
+ * @property {number|null} velocityScore    - 0-100 price-velocity score.
+ */
+
+/**
+ * @typedef {Object} BehaviourInterpretation
+ * @property {string|null} title          - Short headline describing the behaviour.
+ * @property {string|null} description    - Plain-language explanation of what the DNA scores mean.
+ * @property {string|null} recommendation - Research-only suggested next step (never an order/trade instruction).
+ */
+
+/**
+ * @typedef {Object} BehaviourLearning
+ * @property {number|null} historicalMatches   - Count of past profiles matching this behaviour pattern.
+ * @property {number|null} historicalWinRate   - 0-100 win rate across those historical matches.
+ * @property {number|null} averageProfit       - Average result magnitude across those matches (research metric only).
+ * @property {number|null} averageConfidence   - 0-100 average confidence across those matches.
+ */
+
+/**
+ * @typedef {Object} SimilarBehaviour
+ * @property {string|null} profileId  - Unique id of the matched Behaviour Profile record.
+ * @property {string|null} date       - ISO date (YYYY-MM-DD) of the matched profile.
+ * @property {string|null} symbol     - Instrument symbol of the matched profile.
+ * @property {number|null} confidence - 0-100 similarity/confidence score.
+ * @property {BehaviourResult|null} result - Outcome label of the matched profile.
+ */
+
+/**
+ * @typedef {Object} BehaviourData
+ * @property {BehaviourSummary} summary
+ * @property {BehaviourDna} dna
+ * @property {BehaviourInterpretation} interpretation
+ * @property {BehaviourLearning} learning
+ * @property {SimilarBehaviour[]} similarBehaviours
+ */
+
+/* ============================================================
    DATA PROVIDER LAYER
    ------------------------------------------------------------
-   The Behaviour Explorer UI (below) never touches raw data
-   structures directly and never hits a network/storage API of
-   its own. It calls ONE function — loadBehaviourData(symbol) —
-   and renders whatever object comes back.
+   The Behaviour Explorer UI never touches raw data structures
+   directly and never hits a network/storage API of its own. It
+   calls ONE function — loadBehaviourData(symbol) — and renders
+   whatever BehaviourData object comes back.
 
    Today loadBehaviourData() resolves mock data generated in-
-   browser (see the "MOCK DATA SOURCE" section). Later it will
-   be re-pointed at a real backend, e.g.:
+   browser (see the "MOCK DATA SOURCE" section). Later it will be
+   re-pointed at a real backend, e.g.:
 
      async function loadBehaviourData(symbol) {
-       return loadBehaviourDataFromSupabase(symbol);
+       return normalizeBehaviourData(await loadBehaviourDataFromSupabase(symbol));
      }
 
    or
 
      async function loadBehaviourData(symbol) {
-       return loadBehaviourDataFromAPI(symbol);
+       return normalizeBehaviourData(await loadBehaviourDataFromAPI(symbol));
      }
 
-   As long as the replacement resolves the same shape:
-
-     {
-       summary:  { symbol, date, time, result, confidence,
-                    primaryScore, compressionScore, velocityScore,
-                    session, weekday },
-       dna:      { confidence, primaryScore, compressionScore, velocityScore },
-       explanation: { confidence, primaryScore, compressionScore, velocityScore },
-       similarBehaviours: [ { date, symbol, confidence, result }, ... ]
-     }
-
-   ...nothing in the UI / renderer layer below has to change.
+   Every raw response — mock, Supabase, or REST — is always passed
+   through normalizeBehaviourData() before it reaches the UI, so
+   the renderers can trust the BehaviourData contract completely
+   and never need to guard against missing fields themselves.
    ============================================================ */
 
 const SYMBOL_LIST = [
@@ -1644,19 +1705,21 @@ const SYMBOL_LIST = [
  * loadBehaviourData(symbol)
  * -------------------------
  * THE single entry point for all Behaviour Explorer data.
- * Every UI component (summary cards, DNA bars, explanation text,
- * similar-behaviours table) sources its data from this function
- * and this function only — never from module-level arrays, never
- * from a generator called directly.
+ * Every UI component (summary cards, DNA bars, interpretation
+ * text, similar-behaviours table) sources its data from this
+ * function and this function only — never from module-level
+ * arrays, never from a generator called directly.
  *
  * Swap the implementation for Supabase/REST/local-sync later;
- * keep the async signature and the returned shape identical.
+ * keep the async signature and always run the raw result through
+ * normalizeBehaviourData() before returning it.
  *
  * @param {string} symbol
- * @returns {Promise<{summary:object, dna:object, explanation:object, similarBehaviours:object[]}>}
+ * @returns {Promise<BehaviourData>}
  */
 async function loadBehaviourData(symbol) {
-  return loadBehaviourDataMock(symbol);
+  const raw = await loadBehaviourDataMock(symbol);
+  return normalizeBehaviourData(raw);
 }
 
 /* ---- Future swap-in targets (left as documented stubs) ----
@@ -1668,16 +1731,125 @@ async function loadBehaviourDataFromSupabase(symbol) {
     .eq('symbol', symbol)
     .single();
   if (error) throw error;
-  return mapSupabaseRowToBehaviourData(data);
+  return data; // raw shape — still passed through normalizeBehaviourData()
 }
 
 async function loadBehaviourDataFromAPI(symbol) {
   const res = await fetch('/api/behaviour?symbol=' + encodeURIComponent(symbol));
   if (!res.ok) throw new Error('Failed to load behaviour data for ' + symbol);
-  return res.json();
+  return res.json(); // raw shape — still passed through normalizeBehaviourData()
 }
 
 ------------------------------------------------------------- */
+
+/* ============================================================
+   VALIDATION LAYER
+   ------------------------------------------------------------
+   normalizeBehaviourData() is the single gate every raw response
+   must pass through before it becomes a trustworthy BehaviourData
+   object. It never throws on missing/malformed input — it simply
+   fills in `null` for anything absent, so a partial or broken
+   backend response degrades to "—" in the UI instead of crashing
+   a renderer.
+   ============================================================ */
+
+/**
+ * Returns `value` unless it is `undefined` or `null`, in which case
+ * it returns `null`. Centralises the "missing field → null" rule.
+ * @param {*} value
+ * @returns {*}
+ */
+function behaviourFieldOrNull(value){
+  return (value === undefined || value === null) ? null : value;
+}
+
+/**
+ * @returns {BehaviourData} A fully-populated BehaviourData object with every field null.
+ */
+function createEmptyBehaviourData(){
+  return {
+    summary: {
+      symbol: null, profileId: null, date: null, time: null,
+      timeframe: null, result: null, confidence: null, session: null, weekday: null
+    },
+    dna: { primaryScore: null, compressionScore: null, velocityScore: null },
+    interpretation: { title: null, description: null, recommendation: null },
+    learning: {
+      historicalMatches: null, historicalWinRate: null,
+      averageProfit: null, averageConfidence: null
+    },
+    similarBehaviours: []
+  };
+}
+
+/**
+ * Normalizes one raw similar-behaviour row into the SimilarBehaviour shape,
+ * replacing any missing field with `null`.
+ * @param {*} row
+ * @returns {SimilarBehaviour}
+ */
+function normalizeSimilarBehaviour(row){
+  const r = (row && typeof row === 'object') ? row : {};
+  return {
+    profileId: behaviourFieldOrNull(r.profileId),
+    date: behaviourFieldOrNull(r.date),
+    symbol: behaviourFieldOrNull(r.symbol),
+    confidence: behaviourFieldOrNull(r.confidence),
+    result: behaviourFieldOrNull(r.result)
+  };
+}
+
+/**
+ * Validates and normalizes any raw provider response into a well-formed
+ * BehaviourData object. Missing top-level sections, missing individual
+ * fields, and a missing/malformed similarBehaviours array are all
+ * tolerated — everything absent becomes `null` (or `[]` for the list).
+ * This is the ONLY function that should ever construct a BehaviourData
+ * object from untrusted input; renderers should never need to.
+ *
+ * @param {*} raw - Whatever the active data source returned.
+ * @returns {BehaviourData}
+ */
+function normalizeBehaviourData(raw){
+  const src = (raw && typeof raw === 'object') ? raw : {};
+
+  const summarySrc = (src.summary && typeof src.summary === 'object') ? src.summary : {};
+  const dnaSrc = (src.dna && typeof src.dna === 'object') ? src.dna : {};
+  const interpretationSrc = (src.interpretation && typeof src.interpretation === 'object') ? src.interpretation : {};
+  const learningSrc = (src.learning && typeof src.learning === 'object') ? src.learning : {};
+  const similarSrc = Array.isArray(src.similarBehaviours) ? src.similarBehaviours : [];
+
+  return {
+    summary: {
+      symbol: behaviourFieldOrNull(summarySrc.symbol),
+      profileId: behaviourFieldOrNull(summarySrc.profileId),
+      date: behaviourFieldOrNull(summarySrc.date),
+      time: behaviourFieldOrNull(summarySrc.time),
+      timeframe: behaviourFieldOrNull(summarySrc.timeframe),
+      result: behaviourFieldOrNull(summarySrc.result),
+      confidence: behaviourFieldOrNull(summarySrc.confidence),
+      session: behaviourFieldOrNull(summarySrc.session),
+      weekday: behaviourFieldOrNull(summarySrc.weekday)
+    },
+    dna: {
+      primaryScore: behaviourFieldOrNull(dnaSrc.primaryScore),
+      compressionScore: behaviourFieldOrNull(dnaSrc.compressionScore),
+      velocityScore: behaviourFieldOrNull(dnaSrc.velocityScore)
+    },
+    interpretation: {
+      title: behaviourFieldOrNull(interpretationSrc.title),
+      description: behaviourFieldOrNull(interpretationSrc.description),
+      recommendation: behaviourFieldOrNull(interpretationSrc.recommendation)
+    },
+    learning: {
+      historicalMatches: behaviourFieldOrNull(learningSrc.historicalMatches),
+      historicalWinRate: behaviourFieldOrNull(learningSrc.historicalWinRate),
+      averageProfit: behaviourFieldOrNull(learningSrc.averageProfit),
+      averageConfidence: behaviourFieldOrNull(learningSrc.averageConfidence)
+    },
+    similarBehaviours: similarSrc.map(normalizeSimilarBehaviour)
+  };
+}
 
 /* ============================================================
    MOCK DATA SOURCE
@@ -1687,7 +1859,9 @@ async function loadBehaviourDataFromAPI(symbol) {
    MarketMemory.csv, TradeJournal, SymbolRanking). It is only
    ever called from loadBehaviourDataMock(), which is only ever
    called from loadBehaviourData(). No other function in this
-   file should call these generators directly.
+   file should call these generators directly. Its output is raw
+   — it still passes through normalizeBehaviourData() like any
+   other source would.
    ============================================================ */
 
 function hashBehaviourString(str){
@@ -1704,6 +1878,10 @@ function behaviourSeededValue(seed, min, max){
   return min + Math.floor(frac * (max - min + 1));
 }
 
+function generateBehaviourProfileId(seed){
+  return 'BP-' + seed.toString(16).toUpperCase().padStart(8, '0').slice(0, 8);
+}
+
 function generateBehaviourSignal(symbol){
   const h = hashBehaviourString(symbol);
 
@@ -1714,9 +1892,12 @@ function generateBehaviourSignal(symbol){
 
   const sessions = ['London', 'New York', 'Tokyo', 'Sydney', 'Overlap'];
   const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+  const timeframes = ['M1', 'M5', 'M15', 'M30', 'H1', 'H4'];
   const session = sessions[h % sessions.length];
   const weekday = weekdays[Math.floor(h / 7) % weekdays.length];
+  const timeframe = timeframes[Math.floor(h / 11) % timeframes.length];
   const result = (confidence + primaryScore) % 2 === 0 ? 'WIN' : 'LOSS';
+  const profileId = generateBehaviourProfileId(h);
 
   const dayOffset = h % 30;
   const d = new Date(Date.UTC(2026, 6, 28 - dayOffset));
@@ -1726,7 +1907,37 @@ function generateBehaviourSignal(symbol){
   const ss = String((h * 13) % 60).padStart(2, '0');
   const time = `${hh}:${mm}:${ss}`;
 
-  return { symbol, date, time, result, confidence, primaryScore, compressionScore, velocityScore, session, weekday };
+  return {
+    symbol, profileId, date, time, timeframe, result, confidence,
+    primaryScore, compressionScore, velocityScore, session, weekday
+  };
+}
+
+function generateBehaviourInterpretation(signal){
+  const strength = describeTier(signal.primaryScore, {high:'a strong trending', medium:'a moderately trending', low:'a weak, range-bound'});
+  const compression = describeTier(signal.compressionScore, {high:'tightly compressed', medium:'moderately compressed', low:'loosely compressed'});
+  const velocity = describeTier(signal.velocityScore, {high:'fast-moving', medium:'average-speed', low:'slow-moving'});
+
+  const title = `${signal.symbol} is showing ${strength} behaviour`;
+  const description = `Price action is ${compression} with ${velocity} moves during the ${signal.session} session. `
+    + `Overall behaviour confidence is ${describeTier(signal.confidence, {high:'strong', medium:'moderate', low:'weak'})}.`;
+  const recommendation = signal.confidence >= 70
+    ? 'Worth flagging for closer research — pattern is consistent enough to study further.'
+    : (signal.confidence >= 40
+        ? 'Keep monitoring — behaviour is not yet consistent enough to draw firm research conclusions.'
+        : 'Low-confidence pattern — treat as noise until more samples are collected.');
+
+  return { title, description, recommendation };
+}
+
+function generateBehaviourLearning(symbol){
+  const h = hashBehaviourString(symbol);
+  const historicalMatches = behaviourSeededValue(h + 20, 8, 240);
+  const historicalWinRate = behaviourSeededValue(h + 21, 30, 85);
+  const averageProfit = behaviourSeededValue(h + 22, -15, 60);
+  const averageConfidence = behaviourSeededValue(h + 23, 35, 90);
+
+  return { historicalMatches, historicalWinRate, averageProfit, averageConfidence };
 }
 
 function generateSimilarBehaviours(symbol){
@@ -1739,8 +1950,9 @@ function generateSimilarBehaviours(symbol){
     const result = (h + i) % 3 === 0 ? 'LOSS' : 'WIN';
     const dayOffset = (h + i * 5) % 60;
     const d = new Date(Date.UTC(2026, 6, 28 - dayOffset));
+    const profileId = generateBehaviourProfileId(h + i * 97 + 3);
 
-    rows.push({ date: d.toISOString().slice(0, 10), symbol: otherSymbol, confidence, result });
+    rows.push({ profileId, date: d.toISOString().slice(0, 10), symbol: otherSymbol, confidence, result });
   }
 
   return rows;
@@ -1748,26 +1960,40 @@ function generateSimilarBehaviours(symbol){
 
 /**
  * loadBehaviourDataMock(symbol)
- * Assembles the standard { summary, dna, explanation, similarBehaviours }
- * shape from the seeded demo generators above. This is the ONLY function
- * that should ever be swapped out (or have siblings added alongside it,
- * e.g. loadBehaviourDataFromSupabase) when real data sources come online.
+ * Assembles a raw (pre-validation) BehaviourData-shaped object from the
+ * seeded demo generators above. This is the ONLY function that should
+ * ever be swapped out (or have siblings added alongside it, e.g.
+ * loadBehaviourDataFromSupabase) when real data sources come online.
+ * Its return value is NOT assumed to be well-formed — loadBehaviourData()
+ * always runs it through normalizeBehaviourData() before use.
+ * @param {string} symbol
+ * @returns {Promise<*>} raw, pre-validation data
  */
 async function loadBehaviourDataMock(symbol){
   const signal = generateBehaviourSignal(symbol);
+  const interpretation = generateBehaviourInterpretation(signal);
+  const learning = generateBehaviourLearning(symbol);
   const similar = generateSimilarBehaviours(symbol);
 
-  const scores = {
-    confidence: signal.confidence,
-    primaryScore: signal.primaryScore,
-    compressionScore: signal.compressionScore,
-    velocityScore: signal.velocityScore
-  };
-
   return {
-    summary: { ...signal },
-    dna: { ...scores },
-    explanation: { ...scores },
+    summary: {
+      symbol: signal.symbol,
+      profileId: signal.profileId,
+      date: signal.date,
+      time: signal.time,
+      timeframe: signal.timeframe,
+      result: signal.result,
+      confidence: signal.confidence,
+      session: signal.session,
+      weekday: signal.weekday
+    },
+    dna: {
+      primaryScore: signal.primaryScore,
+      compressionScore: signal.compressionScore,
+      velocityScore: signal.velocityScore
+    },
+    interpretation,
+    learning,
     similarBehaviours: similar
   };
 }
@@ -1786,31 +2012,55 @@ let behaviourSymbolFilter = '';
 // a real network call and the user switches symbols before it resolves.
 let behaviourRequestId = 0;
 
+/**
+ * @param {number|null} value
+ * @returns {'strong'|'medium'|'weak'}
+ */
 function behaviourTier(value){
+  if(value == null) return 'weak';
   if(value >= 70) return 'strong';
   if(value >= 40) return 'medium';
   return 'weak';
 }
 
+/**
+ * @param {number|null} value
+ * @param {{high:string, medium:string, low:string}} labels
+ * @returns {string}
+ */
 function describeTier(value, labels){
+  if(value == null) return '—';
   if(value >= 70) return labels.high;
   if(value >= 40) return labels.medium;
   return labels.low;
 }
 
+/**
+ * @param {*} value
+ * @param {string} [suffix]
+ * @returns {string} `value` for display, or an em-dash if the value is null/undefined.
+ */
+function behaviourDisplay(value, suffix){
+  if(value === null || value === undefined || value === '') return '—';
+  return suffix ? `${value}${suffix}` : String(value);
+}
+
+/**
+ * RENDERER — reads only BehaviourSummary.
+ * @param {BehaviourSummary} summary
+ */
 function renderBehaviourSummary(summary){
   const wrap = document.getElementById('behaviourSummaryGrid');
   const cards = [
-    { label: 'Symbol',             value: summary.symbol },
-    { label: 'Date',               value: summary.date },
-    { label: 'Time',               value: summary.time },
-    { label: 'Result',             value: summary.result, cls: summary.result === 'WIN' ? 'success' : 'danger' },
-    { label: 'Confidence',         value: summary.confidence + '%' },
-    { label: 'Primary Score',      value: summary.primaryScore },
-    { label: 'Compression Score',  value: summary.compressionScore },
-    { label: 'Velocity Score',     value: summary.velocityScore },
-    { label: 'Session',            value: summary.session },
-    { label: 'Weekday',            value: summary.weekday }
+    { label: 'Symbol',     value: behaviourDisplay(summary.symbol) },
+    { label: 'Profile ID', value: behaviourDisplay(summary.profileId) },
+    { label: 'Date',       value: behaviourDisplay(summary.date) },
+    { label: 'Time',       value: behaviourDisplay(summary.time) },
+    { label: 'Timeframe',  value: behaviourDisplay(summary.timeframe) },
+    { label: 'Result',     value: behaviourDisplay(summary.result), cls: summary.result === 'WIN' ? 'success' : (summary.result === 'LOSS' ? 'danger' : '') },
+    { label: 'Confidence', value: behaviourDisplay(summary.confidence, '%') },
+    { label: 'Session',    value: behaviourDisplay(summary.session) },
+    { label: 'Weekday',    value: behaviourDisplay(summary.weekday) }
   ];
   wrap.innerHTML = cards.map(c => `
     <div class="summary-card">
@@ -1819,10 +2069,13 @@ function renderBehaviourSummary(summary){
     </div>`).join('');
 }
 
+/**
+ * RENDERER — reads only BehaviourDna.
+ * @param {BehaviourDna} dna
+ */
 function renderBehaviourDna(dna){
   const wrap = document.getElementById('behaviourDnaWrap');
   const bars = [
-    { label: 'Confidence',  value: dna.confidence },
     { label: 'Primary',     value: dna.primaryScore },
     { label: 'Compression', value: dna.compressionScore },
     { label: 'Velocity',    value: dna.velocityScore }
@@ -1830,7 +2083,7 @@ function renderBehaviourDna(dna){
 
   wrap.innerHTML = bars.map((b,i) => `
     <div class="dna-bar-row">
-      <div class="dna-bar-label"><span>${b.label}</span><span>${b.value}%</span></div>
+      <div class="dna-bar-label"><span>${b.label}</span><span>${behaviourDisplay(b.value, '%')}</span></div>
       <div class="dna-bar-track"><div class="dna-bar-fill ${behaviourTier(b.value)}" id="dnaBar${i}"></div></div>
     </div>`).join('');
 
@@ -1839,32 +2092,42 @@ function renderBehaviourDna(dna){
     setTimeout(() => {
       bars.forEach((b,i) => {
         const el = document.getElementById('dnaBar' + i);
-        if(el) el.style.width = b.value + '%';
+        if(el) el.style.width = (b.value == null ? 0 : b.value) + '%';
       });
     }, 50);
   });
 }
 
-function renderBehaviourExplanation(explanation){
+/**
+ * RENDERER — reads only BehaviourInterpretation.
+ * @param {BehaviourInterpretation} interpretation
+ */
+function renderBehaviourExplanation(interpretation){
   const wrap = document.getElementById('behaviourExplanationWrap');
   const lines = [
-    `Trend strength is ${describeTier(explanation.primaryScore, {high:'high', medium:'moderate', low:'low'})}.`,
-    `Compression is ${describeTier(explanation.compressionScore, {high:'high', medium:'moderate', low:'low'})}.`,
-    `Velocity is ${describeTier(explanation.velocityScore, {high:'above average', medium:'average', low:'below average'})}.`,
-    `Overall behaviour confidence is ${describeTier(explanation.confidence, {high:'strong', medium:'moderate', low:'weak'})}.`
-  ];
-  wrap.innerHTML = lines.map(l => `<div class="explanation-line">${l}</div>`).join('');
+    interpretation.title,
+    interpretation.description,
+    interpretation.recommendation
+  ].filter(line => line !== null && line !== undefined && line !== '');
+
+  wrap.innerHTML = lines.length
+    ? lines.map(l => `<div class="explanation-line">${l}</div>`).join('')
+    : '<div class="explanation-line">—</div>';
 }
 
+/**
+ * RENDERER — reads only SimilarBehaviour[].
+ * @param {SimilarBehaviour[]} rows
+ */
 function renderSimilarBehavioursTable(rows){
   const table = document.getElementById('similarBehavioursTable');
   const head = '<tr><th>Date</th><th>Symbol</th><th>Confidence</th><th>Result</th></tr>';
-  const body = rows.map(r => `
-    <tr>
-      <td>${r.date}</td>
-      <td>${r.symbol}</td>
-      <td>${r.confidence}%</td>
-      <td class="${r.result === 'WIN' ? 'pos' : 'neg'}">${r.result}</td>
+  const body = (rows || []).map(r => `
+    <tr data-profile-id="${behaviourDisplay(r.profileId)}">
+      <td>${behaviourDisplay(r.date)}</td>
+      <td>${behaviourDisplay(r.symbol)}</td>
+      <td>${behaviourDisplay(r.confidence, '%')}</td>
+      <td class="${r.result === 'WIN' ? 'pos' : (r.result === 'LOSS' ? 'neg' : '')}">${behaviourDisplay(r.result)}</td>
     </tr>`).join('');
   table.innerHTML = head + body;
 }
@@ -1944,12 +2207,18 @@ function setBehaviourExplorerError(message){
 /**
  * renderBehaviourExplorer()
  * --------------------------
- * UI ORCHESTRATOR — the only function that wires the three layers
+ * UI ORCHESTRATOR — the only function that wires the layers
  * together: it asks the Data Provider (loadBehaviourData) for the
- * current symbol's data, then hands the result to the Renderers
- * (renderBehaviourSummary / renderBehaviourDna / renderBehaviourExplanation /
- * renderSimilarBehavioursTable). Nothing here knows or cares whether
- * that data came from a seeded mock, Supabase, or a REST API.
+ * current symbol's BehaviourData, then hands each section of it to
+ * the matching Renderer (renderBehaviourSummary / renderBehaviourDna /
+ * renderBehaviourExplanation / renderSimilarBehavioursTable). Nothing
+ * here — and nothing in any renderer — knows or cares whether that
+ * data came from a seeded mock, Supabase, or a REST API.
+ *
+ * Note: BehaviourData.learning is part of the formal contract and is
+ * validated the same as every other section, but there is currently
+ * no UI panel wired to display it (kept out of scope so the existing
+ * UI stays unchanged); it's reserved for a future Learning panel.
  */
 async function renderBehaviourExplorer(){
   const symbol = currentBehaviourSymbol;
@@ -1966,6 +2235,7 @@ async function renderBehaviourExplorer(){
   const badge = document.getElementById('badge-behaviour');
   if(badge) badge.textContent = '(' + SYMBOL_LIST.length + ')';
 
+  /** @type {BehaviourData} */
   let data;
   try {
     data = await loadBehaviourData(symbol);
@@ -1981,13 +2251,14 @@ async function renderBehaviourExplorer(){
 
   renderBehaviourSummary(data.summary);
   renderBehaviourDna(data.dna);
-  renderBehaviourExplanation(data.explanation);
+  renderBehaviourExplanation(data.interpretation);
   renderSimilarBehavioursTable(data.similarBehaviours);
 
   ['behaviourSummaryGrid', 'behaviourDnaWrap', 'behaviourExplanationWrap', 'similarBehavioursTable']
     .forEach(id => { const el = document.getElementById(id); if(el) el.style.opacity = '1'; });
 }
 /* Behaviour Explorer END */
+
 
 document.addEventListener('keydown', e => {
   if(e.ctrlKey || e.metaKey){
