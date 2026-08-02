@@ -155,14 +155,23 @@
   .dna-bar-fill.weak{ background:var(--down); }
   .explanation-line{ font-size:13px; color:var(--text); line-height:1.9; padding-left:18px; position:relative; }
   .explanation-line::before{ content:'▸'; position:absolute; left:0; color:var(--accent); }
-  .behaviour-symbol-list{ display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; max-height:170px; overflow-y:auto; }
-  .behaviour-symbol-chip{
-    background:#0e1119; border:1px solid var(--border); color:var(--text);
-    font-family:'IBM Plex Mono',monospace; font-size:11px; padding:6px 10px;
-    border-radius:6px; cursor:pointer; transition:all 0.2s; white-space:nowrap;
+  .behaviour-symbol-selector{ display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap; }
+  .behaviour-symbol-search-wrap{ position:relative; flex:1; min-width:220px; }
+  .behaviour-symbol-search-wrap input{ width:100%; }
+  .behaviour-symbol-dropdown{
+    display:none; position:absolute; top:calc(100% + 4px); left:0; right:0; z-index:50;
+    background:#0e1119; border:1px solid var(--border); border-radius:6px;
+    max-height:240px; overflow-y:auto; box-shadow:0 8px 20px rgba(0,0,0,0.4);
   }
-  .behaviour-symbol-chip:hover{ border-color:var(--accent); }
-  .behaviour-symbol-chip.active{ border-color:var(--accent); background:rgba(46,168,168,0.15); color:var(--accent); }
+  .behaviour-symbol-dropdown.open{ display:block; }
+  .behaviour-symbol-option{
+    padding:9px 12px; font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--text);
+    cursor:pointer; border-bottom:1px solid var(--border);
+  }
+  .behaviour-symbol-option:last-child{ border-bottom:none; }
+  .behaviour-symbol-option:hover, .behaviour-symbol-option.highlighted{ background:rgba(46,168,168,0.12); color:var(--accent); }
+  .behaviour-symbol-option.selected{ color:var(--accent); font-weight:700; }
+  .behaviour-symbol-empty{ padding:10px 12px; color:var(--muted); font-size:12px; font-family:'IBM Plex Mono',monospace; }
   /* Behaviour Explorer END */
 </style>
 </head>
@@ -309,16 +318,18 @@
       <!-- Section 0: Symbol Selector -->
       <div class="panel">
         <h2>Symbol Selector</h2>
-        <div class="baseline-selector">
-          <div style="flex:1; min-width:220px;">
-            <label>Search Symbol</label>
-            <input type="text" id="behaviourSymbolSearch" placeholder="Type to filter (e.g. FX, Pain, Trend)..."
-                   style="width:100%;" oninput="filterBehaviourSymbolList()">
-          </div>
+        <div class="behaviour-symbol-selector">
           <button class="secondary" onclick="prevBehaviourSymbol()">◀ Previous Symbol</button>
+          <div class="behaviour-symbol-search-wrap">
+            <label>Search Symbol</label>
+            <input type="text" id="behaviourSymbolSearch" placeholder="Type to filter (e.g. FX, Pain, 600)..."
+                   autocomplete="off"
+                   oninput="filterBehaviourSymbolList()"
+                   onfocus="openBehaviourSymbolDropdown()">
+            <div id="behaviourSymbolDropdown" class="behaviour-symbol-dropdown"></div>
+          </div>
           <button onclick="nextBehaviourSymbol()">Next Symbol ▶</button>
         </div>
-        <div id="behaviourSymbolList" class="behaviour-symbol-list"></div>
         <div class="thresholds-note">Currently viewing: <b id="behaviourCurrentSymbolLabel"></b></div>
       </div>
 
@@ -1585,12 +1596,12 @@ function toggleAllExpanded(){
 /* TradeJournal, SymbolRanking).                                         */
 
 const SYMBOL_LIST = [
-  'GainX 1200', 'GainX 2400', 'GainX 3600', 'GainX 5000',
-  'PainX 1200', 'PainX 2400', 'PainX 3600', 'PainX 5000',
-  'SwitchX 1200', 'SwitchX 2400', 'SwitchX 3600', 'SwitchX 5000',
-  'BreakX 1200', 'BreakX 2400', 'BreakX 3600', 'BreakX 5000',
-  'TrendX 1200', 'TrendX 2400', 'TrendX 3600', 'TrendX 5000',
-  'FX Vol 20', 'FX Vol 40', 'FX Vol 60', 'FX Vol 80', 'FX Vol 99'
+  'BreakX 1200', 'BreakX 1800', 'BreakX 600',
+  'FX Vol 20', 'FX Vol 40', 'FX Vol 60', 'FX Vol 80', 'FX Vol 99',
+  'GainX 1200', 'GainX 400', 'GainX 600', 'GainX 800', 'GainX 999',
+  'PainX 1200', 'PainX 400', 'PainX 600', 'PainX 800', 'PainX 999',
+  'SwitchX 1200', 'SwitchX 1800', 'SwitchX 600',
+  'TrendX 1200', 'TrendX 1800', 'TrendX 600'
 ];
 
 // Kept as a single variable by design: later this will drive loading of
@@ -1739,23 +1750,35 @@ function renderSimilarBehavioursTable(rows){
   table.innerHTML = head + body;
 }
 
-function renderBehaviourSymbolList(){
-  const wrap = document.getElementById('behaviourSymbolList');
+function renderBehaviourSymbolDropdown(){
+  const dropdown = document.getElementById('behaviourSymbolDropdown');
   const filter = behaviourSymbolFilter.trim().toLowerCase();
   const filtered = SYMBOL_LIST.filter(s => s.toLowerCase().includes(filter));
 
   if(filtered.length === 0){
-    wrap.innerHTML = '<div class="empty-note">No symbols match your search.</div>';
+    dropdown.innerHTML = '<div class="behaviour-symbol-empty">No symbols match your search.</div>';
     return;
   }
 
-  wrap.innerHTML = filtered.map(s => `
-    <div class="behaviour-symbol-chip ${s === currentBehaviourSymbol ? 'active' : ''}"
+  dropdown.innerHTML = filtered.map(s => `
+    <div class="behaviour-symbol-option ${s === currentBehaviourSymbol ? 'selected' : ''}"
          onclick="selectBehaviourSymbol('${s.replace(/'/g, "\\'")}')">${s}</div>`).join('');
+}
+
+function openBehaviourSymbolDropdown(){
+  renderBehaviourSymbolDropdown();
+  document.getElementById('behaviourSymbolDropdown').classList.add('open');
+}
+
+function closeBehaviourSymbolDropdown(){
+  document.getElementById('behaviourSymbolDropdown').classList.remove('open');
 }
 
 function selectBehaviourSymbol(symbol){
   currentBehaviourSymbol = symbol;
+  behaviourSymbolFilter = '';
+  document.getElementById('behaviourSymbolSearch').value = symbol;
+  closeBehaviourSymbolDropdown();
   renderBehaviourExplorer();
 }
 
@@ -1771,8 +1794,16 @@ function prevBehaviourSymbol(){
 
 function filterBehaviourSymbolList(){
   behaviourSymbolFilter = document.getElementById('behaviourSymbolSearch').value;
-  renderBehaviourSymbolList();
+  openBehaviourSymbolDropdown();
 }
+
+// Close the dropdown when clicking anywhere outside it.
+document.addEventListener('click', (e) => {
+  const wrap = document.querySelector('.behaviour-symbol-search-wrap');
+  if(wrap && !wrap.contains(e.target)){
+    closeBehaviourSymbolDropdown();
+  }
+});
 
 function renderBehaviourExplorer(){
   const signal = generateBehaviourSignal(currentBehaviourSymbol);
@@ -1782,7 +1813,9 @@ function renderBehaviourExplorer(){
   renderBehaviourDna(signal);
   renderBehaviourExplanation(signal);
   renderSimilarBehavioursTable(similar);
-  renderBehaviourSymbolList();
+
+  const searchInput = document.getElementById('behaviourSymbolSearch');
+  if(searchInput) searchInput.value = currentBehaviourSymbol;
 
   const label = document.getElementById('behaviourCurrentSymbolLabel');
   if(label) label.textContent = currentBehaviourSymbol;
