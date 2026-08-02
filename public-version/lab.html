@@ -155,6 +155,14 @@
   .dna-bar-fill.weak{ background:var(--down); }
   .explanation-line{ font-size:13px; color:var(--text); line-height:1.9; padding-left:18px; position:relative; }
   .explanation-line::before{ content:'▸'; position:absolute; left:0; color:var(--accent); }
+  .behaviour-symbol-list{ display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; max-height:170px; overflow-y:auto; }
+  .behaviour-symbol-chip{
+    background:#0e1119; border:1px solid var(--border); color:var(--text);
+    font-family:'IBM Plex Mono',monospace; font-size:11px; padding:6px 10px;
+    border-radius:6px; cursor:pointer; transition:all 0.2s; white-space:nowrap;
+  }
+  .behaviour-symbol-chip:hover{ border-color:var(--accent); }
+  .behaviour-symbol-chip.active{ border-color:var(--accent); background:rgba(46,168,168,0.15); color:var(--accent); }
   /* Behaviour Explorer END */
 </style>
 </head>
@@ -296,6 +304,22 @@
     <div class="wrap">
       <div class="page-head">
         <h1>🧠 Behaviour Explorer</h1>
+      </div>
+
+      <!-- Section 0: Symbol Selector -->
+      <div class="panel">
+        <h2>Symbol Selector</h2>
+        <div class="baseline-selector">
+          <div style="flex:1; min-width:220px;">
+            <label>Search Symbol</label>
+            <input type="text" id="behaviourSymbolSearch" placeholder="Type to filter (e.g. FX, Pain, Trend)..."
+                   style="width:100%;" oninput="filterBehaviourSymbolList()">
+          </div>
+          <button class="secondary" onclick="prevBehaviourSymbol()">◀ Previous Symbol</button>
+          <button onclick="nextBehaviourSymbol()">Next Symbol ▶</button>
+        </div>
+        <div id="behaviourSymbolList" class="behaviour-symbol-list"></div>
+        <div class="thresholds-note">Currently viewing: <b id="behaviourCurrentSymbolLabel"></b></div>
       </div>
 
       <!-- Section 1: Behaviour Summary -->
@@ -1556,28 +1580,81 @@ function toggleAllExpanded(){
 /* Behaviour Explorer START */
 /* This block is a visualization-only prototype. It contains no trading  */
 /* logic, order execution, risk management, or broker interaction.      */
-/* Sample data below stands in for future MIE-generated CSV/JSON output. */
+/* All data below is placeholder/demo data standing in for future        */
+/* MIE-generated CSV/JSON output (Behaviour Profiles, MarketMemory.csv,  */
+/* TradeJournal, SymbolRanking).                                         */
 
-const sampleBehaviourSignal = {
-  symbol: 'TrendX 1800',
-  date: '2026-07-28',
-  time: '14:32:07',
-  result: 'WIN',
-  confidence: 82,
-  primaryScore: 76,
-  compressionScore: 54,
-  velocityScore: 71,
-  session: 'London',
-  weekday: 'Tuesday'
-};
-
-const sampleSimilarBehaviours = [
-  { date: '2026-07-21', symbol: 'TrendX 1800', confidence: 79, result: 'WIN' },
-  { date: '2026-07-15', symbol: 'PainX 400',   confidence: 68, result: 'LOSS' },
-  { date: '2026-07-09', symbol: 'GainX 1200',  confidence: 74, result: 'WIN' },
-  { date: '2026-06-30', symbol: 'SwitchX 900', confidence: 61, result: 'WIN' },
-  { date: '2026-06-22', symbol: 'TrendX 1800', confidence: 58, result: 'LOSS' }
+const SYMBOL_LIST = [
+  'GainX 1200', 'GainX 2400', 'GainX 3600', 'GainX 5000',
+  'PainX 1200', 'PainX 2400', 'PainX 3600', 'PainX 5000',
+  'SwitchX 1200', 'SwitchX 2400', 'SwitchX 3600', 'SwitchX 5000',
+  'BreakX 1200', 'BreakX 2400', 'BreakX 3600', 'BreakX 5000',
+  'TrendX 1200', 'TrendX 2400', 'TrendX 3600', 'TrendX 5000',
+  'FX Vol 20', 'FX Vol 40', 'FX Vol 60', 'FX Vol 80', 'FX Vol 99'
 ];
+
+// Kept as a single variable by design: later this will drive loading of
+// real Behaviour Profiles / MarketMemory.csv / TradeJournal / SymbolRanking
+// for whichever symbol is selected.
+let currentBehaviourSymbol = SYMBOL_LIST[0];
+
+let behaviourSymbolFilter = '';
+
+function hashBehaviourString(str){
+  let h = 0;
+  for(let i = 0; i < str.length; i++){
+    h = (h * 31 + str.charCodeAt(i)) >>> 0;
+  }
+  return h;
+}
+
+function behaviourSeededValue(seed, min, max){
+  const x = Math.sin(seed) * 10000;
+  const frac = x - Math.floor(x);
+  return min + Math.floor(frac * (max - min + 1));
+}
+
+function generateBehaviourSignal(symbol){
+  const h = hashBehaviourString(symbol);
+
+  const confidence       = behaviourSeededValue(h + 1, 35, 95);
+  const primaryScore     = behaviourSeededValue(h + 2, 20, 95);
+  const compressionScore = behaviourSeededValue(h + 3, 15, 90);
+  const velocityScore    = behaviourSeededValue(h + 4, 20, 95);
+
+  const sessions = ['London', 'New York', 'Tokyo', 'Sydney', 'Overlap'];
+  const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+  const session = sessions[h % sessions.length];
+  const weekday = weekdays[Math.floor(h / 7) % weekdays.length];
+  const result = (confidence + primaryScore) % 2 === 0 ? 'WIN' : 'LOSS';
+
+  const dayOffset = h % 30;
+  const d = new Date(Date.UTC(2026, 6, 28 - dayOffset));
+  const date = d.toISOString().slice(0, 10);
+  const hh = String(8 + (h % 10)).padStart(2, '0');
+  const mm = String((h * 7) % 60).padStart(2, '0');
+  const ss = String((h * 13) % 60).padStart(2, '0');
+  const time = `${hh}:${mm}:${ss}`;
+
+  return { symbol, date, time, result, confidence, primaryScore, compressionScore, velocityScore, session, weekday };
+}
+
+function generateSimilarBehaviours(symbol){
+  const h = hashBehaviourString(symbol);
+  const rows = [];
+
+  for(let i = 0; i < 5; i++){
+    const otherSymbol = SYMBOL_LIST[(h + i * 7) % SYMBOL_LIST.length];
+    const confidence = behaviourSeededValue(h + i * 3 + 10, 40, 90);
+    const result = (h + i) % 3 === 0 ? 'LOSS' : 'WIN';
+    const dayOffset = (h + i * 5) % 60;
+    const d = new Date(Date.UTC(2026, 6, 28 - dayOffset));
+
+    rows.push({ date: d.toISOString().slice(0, 10), symbol: otherSymbol, confidence, result });
+  }
+
+  return rows;
+}
 
 function behaviourTier(value){
   if(value >= 70) return 'strong';
@@ -1662,14 +1739,56 @@ function renderSimilarBehavioursTable(rows){
   table.innerHTML = head + body;
 }
 
+function renderBehaviourSymbolList(){
+  const wrap = document.getElementById('behaviourSymbolList');
+  const filter = behaviourSymbolFilter.trim().toLowerCase();
+  const filtered = SYMBOL_LIST.filter(s => s.toLowerCase().includes(filter));
+
+  if(filtered.length === 0){
+    wrap.innerHTML = '<div class="empty-note">No symbols match your search.</div>';
+    return;
+  }
+
+  wrap.innerHTML = filtered.map(s => `
+    <div class="behaviour-symbol-chip ${s === currentBehaviourSymbol ? 'active' : ''}"
+         onclick="selectBehaviourSymbol('${s.replace(/'/g, "\\'")}')">${s}</div>`).join('');
+}
+
+function selectBehaviourSymbol(symbol){
+  currentBehaviourSymbol = symbol;
+  renderBehaviourExplorer();
+}
+
+function nextBehaviourSymbol(){
+  const idx = SYMBOL_LIST.indexOf(currentBehaviourSymbol);
+  selectBehaviourSymbol(SYMBOL_LIST[(idx + 1) % SYMBOL_LIST.length]);
+}
+
+function prevBehaviourSymbol(){
+  const idx = SYMBOL_LIST.indexOf(currentBehaviourSymbol);
+  selectBehaviourSymbol(SYMBOL_LIST[(idx - 1 + SYMBOL_LIST.length) % SYMBOL_LIST.length]);
+}
+
+function filterBehaviourSymbolList(){
+  behaviourSymbolFilter = document.getElementById('behaviourSymbolSearch').value;
+  renderBehaviourSymbolList();
+}
+
 function renderBehaviourExplorer(){
-  renderBehaviourSummary(sampleBehaviourSignal);
-  renderBehaviourDna(sampleBehaviourSignal);
-  renderBehaviourExplanation(sampleBehaviourSignal);
-  renderSimilarBehavioursTable(sampleSimilarBehaviours);
+  const signal = generateBehaviourSignal(currentBehaviourSymbol);
+  const similar = generateSimilarBehaviours(currentBehaviourSymbol);
+
+  renderBehaviourSummary(signal);
+  renderBehaviourDna(signal);
+  renderBehaviourExplanation(signal);
+  renderSimilarBehavioursTable(similar);
+  renderBehaviourSymbolList();
+
+  const label = document.getElementById('behaviourCurrentSymbolLabel');
+  if(label) label.textContent = currentBehaviourSymbol;
 
   const badge = document.getElementById('badge-behaviour');
-  if(badge) badge.textContent = '(' + sampleSimilarBehaviours.length + ')';
+  if(badge) badge.textContent = '(' + SYMBOL_LIST.length + ')';
 }
 /* Behaviour Explorer END */
 
