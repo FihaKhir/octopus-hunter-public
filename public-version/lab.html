@@ -1595,6 +1595,42 @@ function toggleAllExpanded(){
 /* MIE-generated CSV/JSON output (Behaviour Profiles, MarketMemory.csv,  */
 /* TradeJournal, SymbolRanking).                                         */
 
+/* ============================================================
+   DATA PROVIDER LAYER
+   ------------------------------------------------------------
+   The Behaviour Explorer UI (below) never touches raw data
+   structures directly and never hits a network/storage API of
+   its own. It calls ONE function — loadBehaviourData(symbol) —
+   and renders whatever object comes back.
+
+   Today loadBehaviourData() resolves mock data generated in-
+   browser (see the "MOCK DATA SOURCE" section). Later it will
+   be re-pointed at a real backend, e.g.:
+
+     async function loadBehaviourData(symbol) {
+       return loadBehaviourDataFromSupabase(symbol);
+     }
+
+   or
+
+     async function loadBehaviourData(symbol) {
+       return loadBehaviourDataFromAPI(symbol);
+     }
+
+   As long as the replacement resolves the same shape:
+
+     {
+       summary:  { symbol, date, time, result, confidence,
+                    primaryScore, compressionScore, velocityScore,
+                    session, weekday },
+       dna:      { confidence, primaryScore, compressionScore, velocityScore },
+       explanation: { confidence, primaryScore, compressionScore, velocityScore },
+       similarBehaviours: [ { date, symbol, confidence, result }, ... ]
+     }
+
+   ...nothing in the UI / renderer layer below has to change.
+   ============================================================ */
+
 const SYMBOL_LIST = [
   'BreakX 1200', 'BreakX 1800', 'BreakX 600',
   'FX Vol 20', 'FX Vol 40', 'FX Vol 60', 'FX Vol 80', 'FX Vol 99',
@@ -1604,12 +1640,55 @@ const SYMBOL_LIST = [
   'TrendX 1200', 'TrendX 1800', 'TrendX 600'
 ];
 
-// Kept as a single variable by design: later this will drive loading of
-// real Behaviour Profiles / MarketMemory.csv / TradeJournal / SymbolRanking
-// for whichever symbol is selected.
-let currentBehaviourSymbol = SYMBOL_LIST[0];
+/**
+ * loadBehaviourData(symbol)
+ * -------------------------
+ * THE single entry point for all Behaviour Explorer data.
+ * Every UI component (summary cards, DNA bars, explanation text,
+ * similar-behaviours table) sources its data from this function
+ * and this function only — never from module-level arrays, never
+ * from a generator called directly.
+ *
+ * Swap the implementation for Supabase/REST/local-sync later;
+ * keep the async signature and the returned shape identical.
+ *
+ * @param {string} symbol
+ * @returns {Promise<{summary:object, dna:object, explanation:object, similarBehaviours:object[]}>}
+ */
+async function loadBehaviourData(symbol) {
+  return loadBehaviourDataMock(symbol);
+}
 
-let behaviourSymbolFilter = '';
+/* ---- Future swap-in targets (left as documented stubs) ----
+
+async function loadBehaviourDataFromSupabase(symbol) {
+  const { data, error } = await supabaseClient
+    .from('behaviour_profiles')
+    .select('*')
+    .eq('symbol', symbol)
+    .single();
+  if (error) throw error;
+  return mapSupabaseRowToBehaviourData(data);
+}
+
+async function loadBehaviourDataFromAPI(symbol) {
+  const res = await fetch('/api/behaviour?symbol=' + encodeURIComponent(symbol));
+  if (!res.ok) throw new Error('Failed to load behaviour data for ' + symbol);
+  return res.json();
+}
+
+------------------------------------------------------------- */
+
+/* ============================================================
+   MOCK DATA SOURCE
+   ------------------------------------------------------------
+   Everything in this section is placeholder/demo data standing
+   in for future MIE-generated output (Behaviour Profiles,
+   MarketMemory.csv, TradeJournal, SymbolRanking). It is only
+   ever called from loadBehaviourDataMock(), which is only ever
+   called from loadBehaviourData(). No other function in this
+   file should call these generators directly.
+   ============================================================ */
 
 function hashBehaviourString(str){
   let h = 0;
@@ -1667,6 +1746,46 @@ function generateSimilarBehaviours(symbol){
   return rows;
 }
 
+/**
+ * loadBehaviourDataMock(symbol)
+ * Assembles the standard { summary, dna, explanation, similarBehaviours }
+ * shape from the seeded demo generators above. This is the ONLY function
+ * that should ever be swapped out (or have siblings added alongside it,
+ * e.g. loadBehaviourDataFromSupabase) when real data sources come online.
+ */
+async function loadBehaviourDataMock(symbol){
+  const signal = generateBehaviourSignal(symbol);
+  const similar = generateSimilarBehaviours(symbol);
+
+  const scores = {
+    confidence: signal.confidence,
+    primaryScore: signal.primaryScore,
+    compressionScore: signal.compressionScore,
+    velocityScore: signal.velocityScore
+  };
+
+  return {
+    summary: { ...signal },
+    dna: { ...scores },
+    explanation: { ...scores },
+    similarBehaviours: similar
+  };
+}
+
+/* ============================================================
+   UI STATE
+   ============================================================ */
+
+// Kept as a single variable by design: this drives which symbol
+// loadBehaviourData() is called with.
+let currentBehaviourSymbol = SYMBOL_LIST[0];
+
+let behaviourSymbolFilter = '';
+
+// Guards against out-of-order responses if the provider ever becomes
+// a real network call and the user switches symbols before it resolves.
+let behaviourRequestId = 0;
+
 function behaviourTier(value){
   if(value >= 70) return 'strong';
   if(value >= 40) return 'medium';
@@ -1679,19 +1798,19 @@ function describeTier(value, labels){
   return labels.low;
 }
 
-function renderBehaviourSummary(signal){
+function renderBehaviourSummary(summary){
   const wrap = document.getElementById('behaviourSummaryGrid');
   const cards = [
-    { label: 'Symbol',             value: signal.symbol },
-    { label: 'Date',               value: signal.date },
-    { label: 'Time',               value: signal.time },
-    { label: 'Result',             value: signal.result, cls: signal.result === 'WIN' ? 'success' : 'danger' },
-    { label: 'Confidence',         value: signal.confidence + '%' },
-    { label: 'Primary Score',      value: signal.primaryScore },
-    { label: 'Compression Score',  value: signal.compressionScore },
-    { label: 'Velocity Score',     value: signal.velocityScore },
-    { label: 'Session',            value: signal.session },
-    { label: 'Weekday',            value: signal.weekday }
+    { label: 'Symbol',             value: summary.symbol },
+    { label: 'Date',               value: summary.date },
+    { label: 'Time',               value: summary.time },
+    { label: 'Result',             value: summary.result, cls: summary.result === 'WIN' ? 'success' : 'danger' },
+    { label: 'Confidence',         value: summary.confidence + '%' },
+    { label: 'Primary Score',      value: summary.primaryScore },
+    { label: 'Compression Score',  value: summary.compressionScore },
+    { label: 'Velocity Score',     value: summary.velocityScore },
+    { label: 'Session',            value: summary.session },
+    { label: 'Weekday',            value: summary.weekday }
   ];
   wrap.innerHTML = cards.map(c => `
     <div class="summary-card">
@@ -1700,13 +1819,13 @@ function renderBehaviourSummary(signal){
     </div>`).join('');
 }
 
-function renderBehaviourDna(signal){
+function renderBehaviourDna(dna){
   const wrap = document.getElementById('behaviourDnaWrap');
   const bars = [
-    { label: 'Confidence',  value: signal.confidence },
-    { label: 'Primary',     value: signal.primaryScore },
-    { label: 'Compression', value: signal.compressionScore },
-    { label: 'Velocity',    value: signal.velocityScore }
+    { label: 'Confidence',  value: dna.confidence },
+    { label: 'Primary',     value: dna.primaryScore },
+    { label: 'Compression', value: dna.compressionScore },
+    { label: 'Velocity',    value: dna.velocityScore }
   ];
 
   wrap.innerHTML = bars.map((b,i) => `
@@ -1726,13 +1845,13 @@ function renderBehaviourDna(signal){
   });
 }
 
-function renderBehaviourExplanation(signal){
+function renderBehaviourExplanation(explanation){
   const wrap = document.getElementById('behaviourExplanationWrap');
   const lines = [
-    `Trend strength is ${describeTier(signal.primaryScore, {high:'high', medium:'moderate', low:'low'})}.`,
-    `Compression is ${describeTier(signal.compressionScore, {high:'high', medium:'moderate', low:'low'})}.`,
-    `Velocity is ${describeTier(signal.velocityScore, {high:'above average', medium:'average', low:'below average'})}.`,
-    `Overall behaviour confidence is ${describeTier(signal.confidence, {high:'strong', medium:'moderate', low:'weak'})}.`
+    `Trend strength is ${describeTier(explanation.primaryScore, {high:'high', medium:'moderate', low:'low'})}.`,
+    `Compression is ${describeTier(explanation.compressionScore, {high:'high', medium:'moderate', low:'low'})}.`,
+    `Velocity is ${describeTier(explanation.velocityScore, {high:'above average', medium:'average', low:'below average'})}.`,
+    `Overall behaviour confidence is ${describeTier(explanation.confidence, {high:'strong', medium:'moderate', low:'weak'})}.`
   ];
   wrap.innerHTML = lines.map(l => `<div class="explanation-line">${l}</div>`).join('');
 }
@@ -1805,23 +1924,68 @@ document.addEventListener('click', (e) => {
   }
 });
 
-function renderBehaviourExplorer(){
-  const signal = generateBehaviourSignal(currentBehaviourSymbol);
-  const similar = generateSimilarBehaviours(currentBehaviourSymbol);
+function setBehaviourExplorerLoading(isLoading){
+  const wraps = [
+    'behaviourSummaryGrid', 'behaviourDnaWrap',
+    'behaviourExplanationWrap', 'similarBehavioursTable'
+  ];
+  if(!isLoading) return;
+  wraps.forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.style.opacity = '0.5';
+  });
+}
 
-  renderBehaviourSummary(signal);
-  renderBehaviourDna(signal);
-  renderBehaviourExplanation(signal);
-  renderSimilarBehavioursTable(similar);
+function setBehaviourExplorerError(message){
+  const wrap = document.getElementById('behaviourExplanationWrap');
+  if(wrap) wrap.innerHTML = `<div class="explanation-line">⚠ ${message}</div>`;
+}
+
+/**
+ * renderBehaviourExplorer()
+ * --------------------------
+ * UI ORCHESTRATOR — the only function that wires the three layers
+ * together: it asks the Data Provider (loadBehaviourData) for the
+ * current symbol's data, then hands the result to the Renderers
+ * (renderBehaviourSummary / renderBehaviourDna / renderBehaviourExplanation /
+ * renderSimilarBehavioursTable). Nothing here knows or cares whether
+ * that data came from a seeded mock, Supabase, or a REST API.
+ */
+async function renderBehaviourExplorer(){
+  const symbol = currentBehaviourSymbol;
+  const requestId = ++behaviourRequestId;
+
+  setBehaviourExplorerLoading(true);
 
   const searchInput = document.getElementById('behaviourSymbolSearch');
-  if(searchInput) searchInput.value = currentBehaviourSymbol;
+  if(searchInput) searchInput.value = symbol;
 
   const label = document.getElementById('behaviourCurrentSymbolLabel');
-  if(label) label.textContent = currentBehaviourSymbol;
+  if(label) label.textContent = symbol;
 
   const badge = document.getElementById('badge-behaviour');
   if(badge) badge.textContent = '(' + SYMBOL_LIST.length + ')';
+
+  let data;
+  try {
+    data = await loadBehaviourData(symbol);
+  } catch (err) {
+    // If a newer request has since been kicked off, drop this stale result.
+    if(requestId !== behaviourRequestId) return;
+    setBehaviourExplorerError('Could not load behaviour data for ' + symbol + '.');
+    return;
+  }
+
+  // Drop out-of-order responses: only the latest request may render.
+  if(requestId !== behaviourRequestId) return;
+
+  renderBehaviourSummary(data.summary);
+  renderBehaviourDna(data.dna);
+  renderBehaviourExplanation(data.explanation);
+  renderSimilarBehavioursTable(data.similarBehaviours);
+
+  ['behaviourSummaryGrid', 'behaviourDnaWrap', 'behaviourExplanationWrap', 'similarBehavioursTable']
+    .forEach(id => { const el = document.getElementById(id); if(el) el.style.opacity = '1'; });
 }
 /* Behaviour Explorer END */
 
@@ -1848,7 +2012,7 @@ if(adminSecret){
 }
 
 /* Behaviour Explorer START */
-renderBehaviourExplorer();
+renderBehaviourExplorer(); // async — fires the first loadBehaviourData() call on page load
 /* Behaviour Explorer END */
 </script>
 
