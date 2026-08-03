@@ -1841,6 +1841,11 @@ function normalizeBehaviourData(raw){
   const summarySrc = (src.summary && typeof src.summary === 'object') ? src.summary : {};
   const dnaSrc = (src.dna && typeof src.dna === 'object') ? src.dna : {};
   const interpretationSrc = (src.interpretation && typeof src.interpretation === 'object') ? src.interpretation : {};
+    if (Object.keys(interpretationSrc).length === 0 &&
+      src.explanation &&
+      typeof src.explanation === 'object') {
+    Object.assign(interpretationSrc, src.explanation);
+  }
   const learningSrc = (src.learning && typeof src.learning === 'object') ? src.learning : {};
   const similarSrc = Array.isArray(src.similarBehaviours) ? src.similarBehaviours : [];
 
