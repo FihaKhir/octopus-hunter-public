@@ -1758,11 +1758,19 @@ function mapSupabaseRowToBehaviourData(data) {
       compressionScore: compressionScore,
       velocityScore: velocityScore
     },
-    explanation: {
-      title: `${data.Metadata?.symbol || "Unknown"} is currently in ${data.MarketState || "Unknown"} market state.`,
-      description: `Trend persistence: ${Math.round(data.DNA?.trend_persistence || 0)}% | Impulse quality: ${Math.round(data.DNA?.impulse_quality || 0)}% | Noise: ${Math.round(data.DNA?.noise || 0)}%.`,
-      recommendation: `Behaviour confidence: ${Math.round(data.DNA?.behaviour_confidence || 0)}%.`
-    },
+      explanation: {
+    title: `${data.Metadata?.symbol || "Unknown"} is currently in an ${data.MarketState || "Unknown"} market state.`,
+  
+    description:
+      `The market shows ${Math.round(data.DNA?.trend_persistence || 0)}% trend persistence, ` +
+      `${Math.round(data.DNA?.impulse_quality || 0)}% impulse quality, and ` +
+      `${Math.round(data.DNA?.noise || 0)}% market noise. ` +
+      `Compression is ${Math.round(data.DNA?.compression || 0)}% while expansion is ${Math.round(data.DNA?.expansion || 0)}%.`,
+  
+    recommendation:
+      `Overall behaviour confidence is ${Math.round(data.DNA?.behaviour_confidence || 0)}%. ` +
+      `This profile is intended for research and comparison with historical market behaviour rather than generating trading decisions.`
+  },
     similarBehaviours: [] 
   };
 }
