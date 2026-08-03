@@ -1860,9 +1860,14 @@ function normalizeBehaviourData(raw){
       velocityScore: behaviourFieldOrNull(dnaSrc.velocityScore)
     },
     interpretation: {
-      title: behaviourFieldOrNull(interpretationSrc.title),
-      description: behaviourFieldOrNull(interpretationSrc.description),
-      recommendation: behaviourFieldOrNull(interpretationSrc.recommendation)
+      symbol: behaviourFieldOrNull(interpretationSrc.symbol),
+      marketState: behaviourFieldOrNull(interpretationSrc.marketState),
+      trendPersistence: behaviourFieldOrNull(interpretationSrc.trendPersistence),
+      impulseQuality: behaviourFieldOrNull(interpretationSrc.impulseQuality),
+      noise: behaviourFieldOrNull(interpretationSrc.noise),
+      compression: behaviourFieldOrNull(interpretationSrc.compression),
+      expansion: behaviourFieldOrNull(interpretationSrc.expansion),
+      behaviourConfidence: behaviourFieldOrNull(interpretationSrc.behaviourConfidence)
     },
     learning: {
       historicalMatches: behaviourFieldOrNull(learningSrc.historicalMatches),
