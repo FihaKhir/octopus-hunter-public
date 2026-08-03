@@ -2189,6 +2189,45 @@ function renderBehaviourExplanation(interpretation){
     : '<div class="explanation-line">—</div>';
 }
 
+  if(info.trendPersistence != null){
+    if(info.trendPersistence >= 70)
+      lines.push("Trend persistence is high.");
+    else if(info.trendPersistence >= 40)
+      lines.push("Trend persistence is moderate.");
+    else
+      lines.push("Trend persistence is low.");
+  }
+
+  if(info.impulseQuality != null){
+    if(info.impulseQuality >= 80)
+      lines.push("Impulse quality is extremely high.");
+    else if(info.impulseQuality >= 60)
+      lines.push("Impulse quality is high.");
+    else
+      lines.push("Impulse quality is moderate.");
+  }
+
+  if(info.noise != null){
+    if(info.noise <= 10)
+      lines.push("Market noise is very low.");
+    else if(info.noise >= 60)
+      lines.push("Market noise is high.");
+  }
+
+  if(info.compression >= 50)
+    lines.push("Compression is active.");
+
+  if(info.expansion >= 50)
+    lines.push("Expansion is active.");
+
+  if(info.behaviourConfidence != null)
+    lines.push(`Behaviour confidence is ${Math.round(info.behaviourConfidence)}%.`);
+
+  wrap.innerHTML = lines.length
+    ? lines.map(x => `<div class="explanation-line">${x}</div>`).join("")
+    : '<div class="explanation-line">—</div>';
+}
+
 /**
  * RENDERER — reads only SimilarBehaviour[].
  * @param {SimilarBehaviour[]} rows
