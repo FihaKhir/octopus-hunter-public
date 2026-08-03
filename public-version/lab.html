@@ -1722,13 +1722,22 @@ async function loadBehaviourData(symbol) {
 }
 
 async function loadBehaviourDataFromSupabase(symbol) {
+  const filePath = `Profiles/${symbol}/PERIOD_M1/2026-08-03.json`;
+  
   const { data, error } = await supabaseClient
-    .from('behaviour_profiles')
-    .select('*')
-    .eq('symbol', symbol)
-    .single();
-  if (error) throw error;
-  return mapSupabaseRowToBehaviourData(data);
+    .storage
+    .from('mie-data')
+    .download(filePath);
+
+  if (error) {
+    console.error(error);
+    throw error;
+  }
+
+  const text = await data.text();
+  const jsonData = JSON.parse(text);
+
+  return mapSupabaseRowToBehaviourData(jsonData);
 }
 
 function mapSupabaseRowToBehaviourData(data) {
