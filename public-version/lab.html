@@ -1735,7 +1735,7 @@ function mapSupabaseRowToBehaviourData(data) {
   const confidence = Math.round(data.DNA?.behaviour_confidence || 0);
   const primaryScore = Math.round(data.DNA?.trend_persistence || 0);
   const compressionScore = Math.round(data.DNA?.compression || 0);
-  const velocityScore = Math.round(data.DNA?.expansion || 0); 
+  const velocityScore = Math.round(data.DNA?.expansion || 0);
 
   return {
     summary: {
@@ -1750,19 +1750,26 @@ function mapSupabaseRowToBehaviourData(data) {
       session: "—",
       weekday: "—"
     },
+
     dna: {
       confidence: confidence,
       primaryScore: primaryScore,
       compressionScore: compressionScore,
       velocityScore: velocityScore
     },
-    explanation: {
-      confidence: confidence,
-      primaryScore: primaryScore,
-      compressionScore: compressionScore,
-      velocityScore: velocityScore
+
+    interpretation: {
+      symbol: data.Metadata?.symbol ?? null,
+      marketState: data.MarketState ?? null,
+      trendPersistence: data.DNA?.trend_persistence ?? null,
+      impulseQuality: data.DNA?.impulse_quality ?? null,
+      noise: data.DNA?.noise ?? null,
+      compression: data.DNA?.compression ?? null,
+      expansion: data.DNA?.expansion ?? null,
+      behaviourConfidence: data.DNA?.behaviour_confidence ?? null
     },
-    similarBehaviours: [] 
+
+    similarBehaviours: []
   };
 }
 
@@ -2127,15 +2134,58 @@ function renderBehaviourDna(dna){
  * @param {BehaviourInterpretation} interpretation
  */
 function renderBehaviourExplanation(interpretation){
-  const wrap = document.getElementById('behaviourExplanationWrap');
-  const lines = [
-    interpretation.title,
-    interpretation.description,
-    interpretation.recommendation
-  ].filter(line => line !== null && line !== undefined && line !== '');
+  const wrap =
+    document.getElementById('behaviourExplanationWrap') ||
+    document.getElementById('behaviourExplanation');
+
+  if(!wrap) return;
+
+  const info = interpretation || {};
+  const lines = [];
+
+  const symbol = info.symbol || "This instrument";
+
+  if(info.marketState){
+    const article = /^[aeiou]/i.test(info.marketState) ? "an" : "a";
+    lines.push(`${symbol} is currently in ${article} ${info.marketState} market state.`);
+  }
+
+  if(info.trendPersistence != null){
+    if(info.trendPersistence >= 70)
+      lines.push("Trend persistence is high.");
+    else if(info.trendPersistence >= 40)
+      lines.push("Trend persistence is moderate.");
+    else
+      lines.push("Trend persistence is low.");
+  }
+
+  if(info.impulseQuality != null){
+    if(info.impulseQuality >= 80)
+      lines.push("Impulse quality is extremely high.");
+    else if(info.impulseQuality >= 60)
+      lines.push("Impulse quality is high.");
+    else
+      lines.push("Impulse quality is moderate.");
+  }
+
+  if(info.noise != null){
+    if(info.noise <= 10)
+      lines.push("Market noise is very low.");
+    else if(info.noise >= 60)
+      lines.push("Market noise is high.");
+  }
+
+  if(info.compression >= 50)
+    lines.push("Compression is active.");
+
+  if(info.expansion >= 50)
+    lines.push("Expansion is active.");
+
+  if(info.behaviourConfidence != null)
+    lines.push(`Behaviour confidence is ${Math.round(info.behaviourConfidence)}%.`);
 
   wrap.innerHTML = lines.length
-    ? lines.map(l => `<div class="explanation-line">${l}</div>`).join('')
+    ? lines.map(x => `<div class="explanation-line">${x}</div>`).join("")
     : '<div class="explanation-line">—</div>';
 }
 
