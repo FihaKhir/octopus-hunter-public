@@ -1718,11 +1718,8 @@ const SYMBOL_LIST = [
  * @returns {Promise<BehaviourData>}
  */
 async function loadBehaviourData(symbol) {
-  const raw = await loadBehaviourDataMock(symbol);
-  return normalizeBehaviourData(raw);
+  return loadBehaviourDataFromSupabase(symbol);
 }
-
-/* ---- Future swap-in targets (left as documented stubs) ----
 
 async function loadBehaviourDataFromSupabase(symbol) {
   const { data, error } = await supabaseClient
@@ -1731,16 +1728,43 @@ async function loadBehaviourDataFromSupabase(symbol) {
     .eq('symbol', symbol)
     .single();
   if (error) throw error;
-  return data; // raw shape — still passed through normalizeBehaviourData()
+  return mapSupabaseRowToBehaviourData(data);
 }
 
-async function loadBehaviourDataFromAPI(symbol) {
-  const res = await fetch('/api/behaviour?symbol=' + encodeURIComponent(symbol));
-  if (!res.ok) throw new Error('Failed to load behaviour data for ' + symbol);
-  return res.json(); // raw shape — still passed through normalizeBehaviourData()
-}
+function mapSupabaseRowToBehaviourData(data) {
+  const confidence = Math.round(data.DNA?.behaviour_confidence || 0);
+  const primaryScore = Math.round(data.DNA?.trend_persistence || 0);
+  const compressionScore = Math.round(data.DNA?.compression || 0);
+  const velocityScore = Math.round(data.DNA?.expansion || 0); 
 
-------------------------------------------------------------- */
+  return {
+    summary: {
+      symbol: data.Metadata?.symbol || "—",
+      date: data.Metadata?.timestamp || "—",
+      time: data.Metadata?.timeframe || "—",
+      result: data.MarketState || "—",
+      confidence: confidence,
+      primaryScore: primaryScore,
+      compressionScore: compressionScore,
+      velocityScore: velocityScore,
+      session: "—",
+      weekday: "—"
+    },
+    dna: {
+      confidence: confidence,
+      primaryScore: primaryScore,
+      compressionScore: compressionScore,
+      velocityScore: velocityScore
+    },
+    explanation: {
+      confidence: confidence,
+      primaryScore: primaryScore,
+      compressionScore: compressionScore,
+      velocityScore: velocityScore
+    },
+    similarBehaviours: [] 
+  };
+}
 
 /* ============================================================
    VALIDATION LAYER
