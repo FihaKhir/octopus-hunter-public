@@ -21,9 +21,12 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'missing_symbol' });
   }
 
+  // Ensure URL decoding is correctly handled for symbols containing spaces or special characters (e.g., "TrendX 1200")
+  const decodedSymbol = decodeURIComponent(symbol);
+
   // Phase 1: fixed to today's M1 profile. Date/period can become query
   // params later without changing this endpoint's shape.
-  const filePath = `Profiles/${symbol}/PERIOD_M1/2026-08-03.json`;
+  const filePath = `Profiles/${decodedSymbol}/PERIOD_M1/2026-08-03.json`;
 
   try {
     const { data, error } = await supabase
