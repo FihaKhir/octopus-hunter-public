@@ -2134,15 +2134,17 @@ function renderBehaviourDna(dna){
  */
 function renderBehaviourExplanation(interpretation){
   const wrap = document.getElementById('behaviourExplanationWrap');
-  const lines = [
-    interpretation.title,
-    interpretation.description,
-    interpretation.recommendation
-  ].filter(line => line !== null && line !== undefined && line !== '');
 
-  wrap.innerHTML = lines.length
-    ? lines.map(l => `<div class="explanation-line">${l}</div>`).join('')
-    : '<div class="explanation-line">—</div>';
+  console.log("Rendering interpretation:", interpretation);
+  console.log("Wrap:", wrap);
+
+  if(!wrap) return;
+
+  wrap.innerHTML = `
+    <div class="explanation-line">${interpretation.title ?? ""}</div>
+    <div class="explanation-line">${interpretation.description ?? ""}</div>
+    <div class="explanation-line">${interpretation.recommendation ?? ""}</div>
+  `;
 }
 
 /**
