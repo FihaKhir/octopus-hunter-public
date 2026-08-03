@@ -2264,6 +2264,10 @@ async function renderBehaviourExplorer(){
   let data;
   try {
     data = await loadBehaviourData(symbol);
+    
+    console.log("BehaviourData:", data);
+    console.log("Interpretation:", data.interpretation);
+    
   } catch (err) {
     // If a newer request has since been kicked off, drop this stale result.
     if(requestId !== behaviourRequestId) return;
