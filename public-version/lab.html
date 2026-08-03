@@ -1757,10 +1757,9 @@ function mapSupabaseRowToBehaviourData(data) {
       velocityScore: velocityScore
     },
     explanation: {
-      confidence: confidence,
-      primaryScore: primaryScore,
-      compressionScore: compressionScore,
-      velocityScore: velocityScore
+      title: `${data.Metadata?.symbol || "Unknown"} is currently in ${data.MarketState || "Unknown"} market state.`,
+      description: `Trend persistence: ${Math.round(data.DNA?.trend_persistence || 0)}% | Impulse quality: ${Math.round(data.DNA?.impulse_quality || 0)}% | Noise: ${Math.round(data.DNA?.noise || 0)}%.`,
+      recommendation: `Behaviour confidence: ${Math.round(data.DNA?.behaviour_confidence || 0)}%.`
     },
     similarBehaviours: [] 
   };
