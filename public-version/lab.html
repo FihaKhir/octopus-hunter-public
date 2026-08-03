@@ -1728,7 +1728,9 @@ async function loadBehaviourDataFromSupabase(symbol) {
   }
   const jsonData = await res.json();
 
-  return mapSupabaseRowToBehaviourData(jsonData);
+  return normalizeBehaviourData(
+    mapSupabaseRowToBehaviourData(jsonData)
+);
 }
 
 function mapSupabaseRowToBehaviourData(data) {
