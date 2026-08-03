@@ -1,8 +1,3 @@
-// api/behaviour-profile.js
-// Serves a single Behaviour Profile JSON file from Supabase Storage
-// (bucket: mie-data) for the Behaviour Explorer panel in lab.html.
-// Mirrors api/history.js's client setup and response conventions.
-
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -13,29 +8,61 @@ const supabase = createClient(
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
 
-  const symbol = req.query.symbol;
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'method_not_allowed' });
+  }
+
+  const symbol = decodeURIComponent(req.query.symbol || '');
+
   if (!symbol) {
     return res.status(400).json({ error: 'missing_symbol' });
   }
 
-  // Ensure URL decoding is correctly handled for symbols containing spaces or special characters (e.g., "TrendX 1200")
-  const decodedSymbol = decodeURIComponent(symbol);
-
-  // Phase 1: fixed to today's M1 profile. Date/period can become query
-  // params later without changing this endpoint's shape.
-  const filePath = `Profiles/${decodedSymbol}/PERIOD_M1/2026-08-03.json`;
-
   try {
+    // List every file inside the symbol folder
+    const { data: files, error: listError } = await supabase
+      .storage
+      .from('mie-data')
+      .list(`Profiles/${symbol}/PERIOD_M1`, {
+        limit: 100
+      });
+
+    if (listError) {
+      console.error('List error:', listError);
+      return res.status(500).json({ error: listError.message });
+    }
+
+    if (!files || files.length === 0) {
+      return res.status(404).json({ error: 'No behaviour profiles found.' });
+    }
+
+    // Keep only JSON files
+    const jsonFiles = files
+      .filter(f => f.name.toLowerCase().endsWith('.json'))
+      .sort((a, b) => b.name.localeCompare(a.name));
+
+    if (jsonFiles.length === 0) {
+      return res.status(404).json({ error: 'No JSON files found.' });
+    }
+
+    const newestFile = jsonFiles[0].name;
+
+    const filePath = `Profiles/${symbol}/PERIOD_M1/${newestFile}`;
+
+    console.log('Loading profile:', filePath);
+
     const { data, error } = await supabase
       .storage
       .from('mie-data')
       .download(filePath);
 
     if (error) {
-      console.error('Supabase storage error:', error);
+      console.error('Download error:', error);
       return res.status(500).json({ error: error.message });
     }
 
@@ -43,8 +70,12 @@ export default async function handler(req, res) {
     const json = JSON.parse(text);
 
     return res.status(200).json(json);
+
   } catch (err) {
-    console.error('Server error:', err);
-    return res.status(500).json({ error: 'Unexpected server error' });
+    console.error(err);
+
+    return res.status(500).json({
+      error: err.message || 'Unexpected server error'
+    });
   }
 }
