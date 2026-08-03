@@ -2142,18 +2142,16 @@ function renderBehaviourDna(dna){
  */
 function renderBehaviourExplanation(interpretation){
   const wrap = document.getElementById('behaviourExplanationWrap');
-  wrap.style.border = "4px solid red";
 
-  console.log("Rendering interpretation:", interpretation);
-  console.log("Wrap:", wrap);
+  const lines = [
+    interpretation.title,
+    interpretation.description,
+    interpretation.recommendation
+  ].filter(Boolean);
 
-  if(!wrap) return;
-
-  wrap.innerHTML = `
-    <div class="explanation-line">${interpretation.title ?? ""}</div>
-    <div class="explanation-line">${interpretation.description ?? ""}</div>
-    <div class="explanation-line">${interpretation.recommendation ?? ""}</div>
-  `;
+  wrap.innerHTML = lines.map(line => `
+    <div class="explanation-line">${line}</div>
+  `).join('');
 }
 
 /**
