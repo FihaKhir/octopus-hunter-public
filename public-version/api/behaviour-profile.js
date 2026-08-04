@@ -89,7 +89,17 @@ export default async function handler(req, res) {
     console.log("Symbol requested:", symbol);
     console.log("Similar rows:", similarRows);
     
-    json.SimilarBehaviours = [];
+    json.SimilarBehaviours = (similarRows || []).map(r => ({
+  date: r.opened_at
+    ? new Date(r.opened_at * 1000).toISOString().slice(0, 10)
+    : "—",
+
+  symbol: r.symbol || "—",
+
+  confidence: r.confidence ?? 0,
+
+  result: r.outcome || "—"
+}));
     
     return res.status(200).json(json);
 
