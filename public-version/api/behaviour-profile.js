@@ -91,10 +91,12 @@ console.log("Similar rows:", similarRows);
 json.SimilarBehaviours = (similarRows || []).map(r => ({
   date: r.opened_at || "—",
   symbol: r.symbol || "—",
+  direction: r.direction || "—",
   confidence: r.confidence ?? 0,
   result: r.outcome || "—",
-  direction: r.direction || "—",
-  duration: String(r.trade_duration_seconds),
+  duration: r.trade_duration_seconds ?? "—",
+  mfe: r.mfe ?? "—",
+  mae: r.mae ?? "—"
 }));
     
     return res.status(200).json(json);
