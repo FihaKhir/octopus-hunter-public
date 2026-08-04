@@ -103,11 +103,16 @@ json.SimilarBehaviours = (similarRows || []).map(r => ({
 // Historical Learning
 const total = similarRows ? similarRows.length : 0;
 
-const wins = (similarRows || []).filter(r => r.outcome === "WIN").length;
+const completed = (similarRows || []).filter(
+  r => r.outcome === "win" || r.outcome === "loss"
+);
 
+const wins = completed.filter(r => r.outcome === "win").length;
 json.Learning = {
-  historicalMatches: total,
-  historicalWinRate: total ? Math.round((wins * 100) / total) : null,
+  historicalMatches: completed.length,
+historicalWinRate: completed.length
+  ? Math.round((wins * 100) / completed.length)
+  : null,
   averageProfit: null,
   averageConfidence: total
     ? Math.round(
