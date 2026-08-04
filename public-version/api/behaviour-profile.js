@@ -90,9 +90,7 @@ export default async function handler(req, res) {
     console.log("Similar rows:", similarRows);
     
     json.SimilarBehaviours = (similarRows || []).map(r => ({
-  date: r.opened_at
-    ? new Date(r.opened_at * 1000).toISOString().slice(0, 10)
-    : "—",
+  date: r.opened_at || "—",
 
   symbol: r.symbol || "—",
 
