@@ -87,8 +87,7 @@ if (similarError) {
 }
 
 console.log("Similar rows:", similarRows);
-console.log(similarRows[0]);
-    
+   
 json.SimilarBehaviours = (similarRows || []).map(r => ({
   date: new Date(r.opened_at * 1000).toISOString().slice(0, 10),
   symbol: r.symbol,
