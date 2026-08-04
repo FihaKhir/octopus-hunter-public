@@ -12,16 +12,46 @@ export default async function handler(req, res) {
   }
 
   const { symbol, family, direction } = req.body;
-  const { data: rows, error } = await supabase
-  .from('trade_history')
-  .select('outcome, confidence')
-  .eq('symbol', symbol)
-  .eq('family', family)
-  .eq('direction', direction)
-  .not('outcome', 'in', '("open","invalidated")');
 
   if (!symbol || !family || !direction) {
     return res.status(400).json({ error: 'Missing data' });
   }
 
+  const { data: rows, error } = await supabase
+    .from('trade_history')
+    .select('outcome, confidence')
+    .eq('symbol', symbol)
+    .eq('family', family)
+    .eq('direction', direction)
+    .not('outcome', 'in', '("open","invalidated")');
+
+  if (error) {
+    return res.status(500).json({ error: error.message });
+  }
+
+  const total = rows.length;
+
+  const wins = rows.filter(r => r.outcome === 'win').length;
+  const losses = rows.filter(r => r.outcome === 'loss').length;
+
+  const winRate = total
+    ? Math.round((wins * 100) / total)
+    : 0;
+
+  const averageConfidence = total
+    ? Math.round(
+        rows.reduce((sum, r) => sum + (r.confidence || 0), 0) / total
+      )
+    : 0;
+
+  return res.status(200).json({
+    symbol,
+    family,
+    direction,
+    totalTrades: total,
+    wins,
+    losses,
+    winRate,
+    averageConfidence
+  });
 }
