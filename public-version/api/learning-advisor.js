@@ -8,16 +8,14 @@ const supabase = createClient(
 export default async function handler(req, res) {
 
   if (req.method !== 'POST' && req.method !== 'GET') {
-  return res.status(405).json({ error: 'Only POST or GET allowed' });
-}
+    return res.status(405).json({ error: 'Only POST or GET allowed' });
+  }
 
-const input = req.method === 'GET'
-  ? req.query
-  : req.body;
+  const input = req.method === 'GET'
+    ? req.query
+    : req.body;
 
-const { symbol, family, direction } = input;
-
-  const { symbol, family, direction } = req.body;
+  const { symbol, family, direction } = input;
 
   if (!symbol || !family || !direction) {
     return res.status(400).json({ error: 'Missing data' });
@@ -35,10 +33,11 @@ const { symbol, family, direction } = input;
     return res.status(500).json({ error: error.message });
   }
 
-  const total = rows.length;
+  const data = rows || [];
 
-  const wins = rows.filter(r => r.outcome === 'win').length;
-  const losses = rows.filter(r => r.outcome === 'loss').length;
+  const total = data.length;
+  const wins = data.filter(r => r.outcome === 'win').length;
+  const losses = data.filter(r => r.outcome === 'loss').length;
 
   const winRate = total
     ? Math.round((wins * 100) / total)
@@ -46,7 +45,7 @@ const { symbol, family, direction } = input;
 
   const averageConfidence = total
     ? Math.round(
-        rows.reduce((sum, r) => sum + (r.confidence || 0), 0) / total
+        data.reduce((sum, r) => sum + (r.confidence || 0), 0) / total
       )
     : 0;
 
