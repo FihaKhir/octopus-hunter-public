@@ -7,9 +7,15 @@ const supabase = createClient(
 
 export default async function handler(req, res) {
 
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Only POST allowed' });
-  }
+  if (req.method !== 'POST' && req.method !== 'GET') {
+  return res.status(405).json({ error: 'Only POST or GET allowed' });
+}
+
+const input = req.method === 'GET'
+  ? req.query
+  : req.body;
+
+const { symbol, family, direction } = input;
 
   const { symbol, family, direction } = req.body;
 
