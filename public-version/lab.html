@@ -2171,7 +2171,7 @@ function renderSimilarBehavioursTable(rows){
       <td>${behaviourDisplay(r.date)}</td>
       <td>${behaviourDisplay(r.symbol)}</td>
       <td>${behaviourDisplay(r.confidence, '%')}</td>
-      <td class="${r.result === 'WIN' ? 'pos' : (r.result === 'LOSS' ? 'neg' : '')}">${behaviourDisplay(r.result)}</td>
+      <td class="${String(r.result).toLowerCase() === 'win' ? 'pos' : (String(r.result).toLowerCase() === 'loss' ? 'neg' : '')}">${behaviourDisplay(r.result)}</td>
     </tr>`).join('');
   table.innerHTML = head + body;
 }
