@@ -1771,8 +1771,13 @@ function mapSupabaseRowToBehaviourData(data) {
       `Overall behaviour confidence is ${Math.round(data.DNA?.behaviour_confidence || 0)}%. ` +
       `This profile is intended for research and comparison with historical market behaviour rather than generating trading decisions.`
   },
-    similarBehaviours: [] 
-  };
+    similarBehaviours: (data.SimilarBehaviours || []).map(item => ({
+      profileId: item.profileId || null,
+      date: item.date || "—",
+      symbol: item.symbol || "—",
+      confidence: Math.round(item.confidence || 0),
+      result: item.result || "—"
+    }))  };
 }
 
 /* ============================================================
