@@ -81,7 +81,10 @@ const { data: similarRows, error: similarError } = await supabase
   .eq('symbol', symbol)
   .order('opened_at', { ascending: false })
   .limit(10);
-
+const { data: learningRows, error: learningError } = await supabase
+  .from('trade_history')
+  .select('outcome, confidence')
+  .eq('symbol', symbol);
 if (similarError) {
   console.error("Similar trades error:", similarError);
 }
@@ -103,7 +106,7 @@ json.SimilarBehaviours = (similarRows || []).map(r => ({
 // Historical Learning
 const total = similarRows ? similarRows.length : 0;
 
-const completed = (similarRows || []).filter(
+const completed = (learningRows || []).filter(
   r => r.outcome === "win" || r.outcome === "loss"
 );
 
@@ -114,11 +117,11 @@ historicalWinRate: completed.length
   ? Math.round((wins * 100) / completed.length)
   : null,
   averageProfit: null,
-  averageConfidence: total
-    ? Math.round(
-        similarRows.reduce((sum, r) => sum + (r.confidence || 0), 0) / total
-      )
-    : null
+  averageConfidence: completed.length
+  ? Math.round(
+      completed.reduce((sum, r) => sum + (r.confidence || 0), 0) / completed.length
+    )
+  : null
 };
     
     return res.status(200).json(json);
