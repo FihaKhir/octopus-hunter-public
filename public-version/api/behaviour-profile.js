@@ -82,6 +82,9 @@ export default async function handler(req, res) {
       .order('opened_at', { ascending: false })
       .limit(10);
     
+    console.log("Symbol requested:", symbol);
+    console.log("Similar rows:", similarRows);
+    
     json.SimilarBehaviours = (similarRows || []).map(r => ({
       profileId: r.opened_at,
       date: new Date(r.opened_at * 1000).toISOString().slice(0,10),
