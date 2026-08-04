@@ -1772,12 +1772,16 @@ function mapSupabaseRowToBehaviourData(data) {
       `This profile is intended for research and comparison with historical market behaviour rather than generating trading decisions.`
   },
     similarBehaviours: (data.SimilarBehaviours || []).map(item => ({
-      profileId: item.profileId || null,
-      date: item.date || "—",
-      symbol: item.symbol || "—",
-      confidence: Math.round(item.confidence || 0),
-      result: item.result || "—"
-    }))  };
+  profileId: item.profileId || null,
+  date: item.date || "—",
+  symbol: item.symbol || "—",
+  direction: item.direction || "—",
+  confidence: Math.round(item.confidence || 0),
+  result: item.result || "—",
+  duration: item.duration || "—",
+  mfe: item.mfe ?? "—",
+  mae: item.mae ?? "—"
+})) };
 }
 
 /* ============================================================
