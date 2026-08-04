@@ -88,7 +88,7 @@ export default async function handler(req, res) {
     
     console.log("Symbol requested:", symbol);
     console.log("Similar rows:", similarRows);
-    
+    console.log(similarRows);
     json.SimilarBehaviours = (similarRows || []).map(r => ({
   date: r.opened_at || "—",
 
