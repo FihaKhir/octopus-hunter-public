@@ -74,7 +74,7 @@ export default async function handler(req, res) {
     
     const json = JSON.parse(text);
 
-      // Load similar historical trades for this symbol
+// Load similar historical trades for this symbol
 const { data: similarRows, error: similarError } = await supabase
   .from('trade_history')
   .select('*')
@@ -87,7 +87,8 @@ if (similarError) {
 }
 
 console.log("Similar rows:", similarRows);
-   
+
+// Similar Behaviours
 json.SimilarBehaviours = (similarRows || []).map(r => ({
   date: new Date(r.opened_at * 1000).toISOString().slice(0, 10),
   symbol: r.symbol,
@@ -98,6 +99,22 @@ json.SimilarBehaviours = (similarRows || []).map(r => ({
   mfe: r.mfe,
   mae: r.mae
 }));
+
+// Historical Learning
+const total = similarRows ? similarRows.length : 0;
+
+const wins = (similarRows || []).filter(r => r.outcome === "WIN").length;
+
+json.Learning = {
+  historicalMatches: total,
+  historicalWinRate: total ? Math.round((wins * 100) / total) : null,
+  averageProfit: null,
+  averageConfidence: total
+    ? Math.round(
+        similarRows.reduce((sum, r) => sum + (r.confidence || 0), 0) / total
+      )
+    : null
+};
     
     return res.status(200).json(json);
 
