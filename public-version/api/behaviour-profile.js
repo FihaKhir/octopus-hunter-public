@@ -98,7 +98,9 @@ export default async function handler(req, res) {
 
   confidence: r.confidence ?? 0,
 
-  result: r.outcome || "—"
+  result: r.outcome || "—",
+
+direction: r.direction || "—"
 }));
     
     return res.status(200).json(json);
