@@ -74,6 +74,22 @@ export default async function handler(req, res) {
     
     const json = JSON.parse(text);
 
+        // Load similar historical trades for this symbol
+    const { data: similarRows } = await supabase
+      .from('trade_history')
+      .select('opened_at,symbol,confidence,result')
+      .eq('symbol', symbol)
+      .order('opened_at', { ascending: false })
+      .limit(10);
+    
+    json.SimilarBehaviours = (similarRows || []).map(r => ({
+      profileId: r.opened_at,
+      date: new Date(r.opened_at * 1000).toISOString().slice(0,10),
+      symbol: r.symbol,
+      confidence: r.confidence || 0,
+      result: r.result || "—"
+    }));
+    
     return res.status(200).json(json);
 
   } catch (err) {
