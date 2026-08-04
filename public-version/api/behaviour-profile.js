@@ -75,12 +75,16 @@ export default async function handler(req, res) {
     const json = JSON.parse(text);
 
         // Load similar historical trades for this symbol
-    const { data: similarRows } = await supabase
+    const { data: similarRows, error: similarError } = await supabase
       .from('trade_history')
-      .select('opened_at,symbol,confidence,result')
+      .select('*')
       .eq('symbol', symbol)
       .order('opened_at', { ascending: false })
       .limit(10);
+    
+    console.log("Symbol requested:", symbol);
+    console.log("Similar rows:", similarRows);
+    console.log("Similar error:", similarError);
     
     console.log("Symbol requested:", symbol);
     console.log("Similar rows:", similarRows);
