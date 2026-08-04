@@ -2165,16 +2165,34 @@ function renderBehaviourExplanation(interpretation){
  */
 function renderSimilarBehavioursTable(rows){
   const table = document.getElementById('similarBehavioursTable');
-  const head = '<tr><th>Date</th><th>Symbol</th><th>Confidence</th><th>Result</th></tr>';
+
+  const head = `
+    <tr>
+      <th>Date</th>
+      <th>Symbol</th>
+      <th>Dir</th>
+      <th>Conf</th>
+      <th>Result</th>
+      <th>Duration</th>
+      <th>MFE</th>
+      <th>MAE</th>
+    </tr>`;
+
   const body = (rows || []).map(r => `
-    <tr data-profile-id="${behaviourDisplay(r.profileId)}">
+    <tr>
       <td>${behaviourDisplay(r.date)}</td>
       <td>${behaviourDisplay(r.symbol)}</td>
+      <td>${behaviourDisplay(r.direction)}</td>
       <td>${behaviourDisplay(r.confidence, '%')}</td>
       <td class="${String(r.result).toLowerCase()==='win' ? 'pos' : (String(r.result).toLowerCase()==='loss' ? 'neg' : '')}">
-        ${behaviourDisplay(r.result)}
+        ${behaviourDisplay(String(r.result).toUpperCase())}
       </td>
-    </tr>`).join('');
+      <td>${behaviourDisplay(r.duration)}</td>
+      <td>${behaviourDisplay(r.mfe)}</td>
+      <td>${behaviourDisplay(r.mae)}</td>
+    </tr>
+  `).join('');
+
   table.innerHTML = head + body;
 }
 
