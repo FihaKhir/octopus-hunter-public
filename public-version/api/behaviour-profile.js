@@ -74,32 +74,27 @@ export default async function handler(req, res) {
     
     const json = JSON.parse(text);
 
-        // Load similar historical trades for this symbol
-    const { data: similarRows, error: similarError } = await supabase
-      .from('trade_history')
-      .select('*')
-      .eq('symbol', symbol)
-      .order('opened_at', { ascending: false })
-      .limit(10);
-    
-    console.log("Symbol requested:", symbol);
-    console.log("Similar rows:", similarRows);
-    console.log("Similar error:", similarError);
-    
-    console.log("Symbol requested:", symbol);
-    console.log("Similar rows:", similarRows);
-    console.log(similarRows);
-    json.SimilarBehaviours = (similarRows || []).map(r => ({
+      // Load similar historical trades for this symbol
+const { data: similarRows, error: similarError } = await supabase
+  .from('trade_history')
+  .select('*')
+  .eq('symbol', symbol)
+  .order('opened_at', { ascending: false })
+  .limit(10);
+
+if (similarError) {
+  console.error("Similar trades error:", similarError);
+}
+
+console.log("Similar rows:", similarRows);
+
+json.SimilarBehaviours = (similarRows || []).map(r => ({
   date: r.opened_at || "—",
-
   symbol: r.symbol || "—",
-
   confidence: r.confidence ?? 0,
-
   result: r.outcome || "—",
-
-direction: r.direction || "—"
-    duration: String(r.trade_duration_seconds),
+  direction: r.direction || "—",
+  duration: String(r.trade_duration_seconds),
 }));
     
     return res.status(200).json(json);
