@@ -99,7 +99,7 @@ export default async function handler(req, res) {
   result: r.outcome || "—",
 
 direction: r.direction || "—"
-      duration: r.trade_duration_seconds ?? "—",
+    duration: String(r.trade_duration_seconds),
 }));
     
     return res.status(200).json(json);
