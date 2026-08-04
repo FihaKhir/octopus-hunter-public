@@ -1828,12 +1828,17 @@ function createEmptyBehaviourData(){
  */
 function normalizeSimilarBehaviour(row){
   const r = (row && typeof row === 'object') ? row : {};
+
   return {
     profileId: behaviourFieldOrNull(r.profileId),
     date: behaviourFieldOrNull(r.date),
     symbol: behaviourFieldOrNull(r.symbol),
+    direction: behaviourFieldOrNull(r.direction),
     confidence: behaviourFieldOrNull(r.confidence),
-    result: behaviourFieldOrNull(r.result)
+    result: behaviourFieldOrNull(r.result),
+    duration: behaviourFieldOrNull(r.duration),
+    mfe: behaviourFieldOrNull(r.mfe),
+    mae: behaviourFieldOrNull(r.mae)
   };
 }
 
