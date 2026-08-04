@@ -94,7 +94,7 @@ export default async function handler(req, res) {
       date: new Date(r.opened_at * 1000).toISOString().slice(0,10),
       symbol: r.symbol,
       confidence: r.confidence || 0,
-      result: r.result || "—"
+      result: r.outcome || "—"
     }));
     
     return res.status(200).json(json);
