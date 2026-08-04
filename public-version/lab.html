@@ -2242,7 +2242,21 @@ console.log("First row:", rows[0]);
 
   table.innerHTML = head + body;
 }
+/**
+ * RENDERER — reads only BehaviourLearning.
+ * @param {BehaviourLearning} learning
+ */
+function renderHistoricalLearning(learning){
+  const matches = document.getElementById('historicalMatches');
+  const winRate = document.getElementById('historicalWinRate');
+  const avgConfidence = document.getElementById('averageConfidence');
+  const avgProfit = document.getElementById('averageProfit');
 
+  if(matches) matches.textContent = behaviourDisplay(learning.historicalMatches);
+  if(winRate) winRate.textContent = behaviourDisplay(learning.historicalWinRate, '%');
+  if(avgConfidence) avgConfidence.textContent = behaviourDisplay(learning.averageConfidence, '%');
+if(avgProfit) avgProfit.textContent = behaviourDisplay(learning.averageProfit);
+}
 function renderBehaviourSymbolDropdown(){
   const dropdown = document.getElementById('behaviourSymbolDropdown');
   const filter = behaviourSymbolFilter.trim().toLowerCase();
@@ -2327,9 +2341,8 @@ function setBehaviourExplorerError(message){
  * data came from a seeded mock, Supabase, or a REST API.
  *
  * Note: BehaviourData.learning is part of the formal contract and is
- * validated the same as every other section, but there is currently
- * no UI panel wired to display it (kept out of scope so the existing
- * UI stays unchanged); it's reserved for a future Learning panel.
+ * now rendered by renderHistoricalLearning() into the Historical
+ * Learning panel, following the same pattern as the other sections.
  */
 async function renderBehaviourExplorer(){
   const symbol = currentBehaviourSymbol;
@@ -2368,6 +2381,7 @@ async function renderBehaviourExplorer(){
   renderBehaviourDna(data.dna);
   renderBehaviourExplanation(data.interpretation);
   renderSimilarBehavioursTable(data.similarBehaviours);
+  renderHistoricalLearning(data.learning);
 
   ['behaviourSummaryGrid', 'behaviourDnaWrap', 'behaviourExplanationWrap', 'similarBehavioursTable']
     .forEach(id => { const el = document.getElementById(id); if(el) el.style.opacity = '1'; });
