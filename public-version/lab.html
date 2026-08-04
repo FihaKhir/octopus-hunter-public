@@ -1737,7 +1737,7 @@ function mapSupabaseRowToBehaviourData(data) {
   const confidence = Math.round(data.DNA?.behaviour_confidence || 0);
   const primaryScore = Math.round(data.DNA?.trend_persistence || 0);
   const compressionScore = Math.round(data.DNA?.compression || 0);
-  const velocityScore = Math.round(data.DNA?.expansion || 0); 
+  const velocityScore = Math.round(data.DNA?.expansion || 0);
 
   return {
     summary: {
@@ -1752,36 +1752,47 @@ function mapSupabaseRowToBehaviourData(data) {
       session: "—",
       weekday: "—"
     },
+
     dna: {
       confidence: confidence,
       primaryScore: primaryScore,
       compressionScore: compressionScore,
       velocityScore: velocityScore
     },
-      explanation: {
-    title: `${data.Metadata?.symbol || "Unknown"} is currently in an ${data.MarketState || "Unknown"} market state.`,
-  
-    description:
-      `The market shows ${Math.round(data.DNA?.trend_persistence || 0)}% trend persistence, ` +
-      `${Math.round(data.DNA?.impulse_quality || 0)}% impulse quality, and ` +
-      `${Math.round(data.DNA?.noise || 0)}% market noise. ` +
-      `Compression is ${Math.round(data.DNA?.compression || 0)}% while expansion is ${Math.round(data.DNA?.expansion || 0)}%.`,
-  
-    recommendation:
-      `Overall behaviour confidence is ${Math.round(data.DNA?.behaviour_confidence || 0)}%. ` +
-      `This profile is intended for research and comparison with historical market behaviour rather than generating trading decisions.`
-  },
+
+    explanation: {
+      title: `${data.Metadata?.symbol || "Unknown"} is currently in an ${data.MarketState || "Unknown"} market state.`,
+
+      description:
+        `The market shows ${Math.round(data.DNA?.trend_persistence || 0)}% trend persistence, ` +
+        `${Math.round(data.DNA?.impulse_quality || 0)}% impulse quality, and ` +
+        `${Math.round(data.DNA?.noise || 0)}% market noise. ` +
+        `Compression is ${Math.round(data.DNA?.compression || 0)}% while expansion is ${Math.round(data.DNA?.expansion || 0)}%.`,
+
+      recommendation:
+        `Overall behaviour confidence is ${Math.round(data.DNA?.behaviour_confidence || 0)}%. ` +
+        `This profile is intended for research and comparison with historical market behaviour rather than generating trading decisions.`
+    },
+
+    learning: {
+      historicalMatches: data.Learning?.historicalMatches ?? null,
+      historicalWinRate: data.Learning?.historicalWinRate ?? null,
+      averageProfit: data.Learning?.averageProfit ?? null,
+      averageConfidence: data.Learning?.averageConfidence ?? null
+    },
+
     similarBehaviours: (data.SimilarBehaviours || []).map(item => ({
-  profileId: item.profileId || null,
-  date: item.date || "—",
-  symbol: item.symbol || "—",
-  direction: item.direction || "—",
-  confidence: Math.round(item.confidence || 0),
-  result: item.result || "—",
-  duration: item.duration || "—",
-  mfe: item.mfe ?? "—",
-  mae: item.mae ?? "—"
-})) };
+      profileId: item.profileId || null,
+      date: item.date || "—",
+      symbol: item.symbol || "—",
+      direction: item.direction || "—",
+      confidence: Math.round(item.confidence || 0),
+      result: item.result || "—",
+      duration: item.duration || "—",
+      mfe: item.mfe ?? "—",
+      mae: item.mae ?? "—"
+    }))
+  };
 }
 
 /* ============================================================
