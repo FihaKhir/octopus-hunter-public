@@ -354,45 +354,62 @@
           This panel makes no trading decisions and triggers no trading logic.
         </div>
       </div>
+
+      <!-- Historical Learning -->
       <section class="card">
-  <h3>Historical Learning</h3>
+        <h3>Historical Learning</h3>
 
-  <div class="stats-grid">
-    <div class="stat">
-      <div class="label">Historical Matches</div>
-      <div id="historicalMatches">—</div>
-    </div>
+        <div class="stats-grid">
+          <div class="stat">
+            <div class="label">Historical Matches</div>
+            <div id="historicalMatches">—</div>
+          </div>
 
-    <div class="stat">
-      <div class="label">Win Rate</div>
-      <div id="historicalWinRate">—</div>
-    </div>
+          <div class="stat">
+            <div class="label">Win Rate</div>
+            <div id="historicalWinRate">—</div>
+          </div>
 
-    <div class="stat">
-      <div class="label">Average Confidence</div>
-      <div id="averageConfidence">—</div>
-    </div>
+          <div class="stat">
+            <div class="label">Average Confidence</div>
+            <div id="averageConfidence">—</div>
+          </div>
 
-    <div class="stat">
-      <div class="label">Average Profit</div>
-      <div id="averageProfit">—</div>
-    </div>
-  </div>
-</section>
+          <div class="stat">
+            <div class="label">Average Profit</div>
+            <div id="averageProfit">—</div>
+          </div>
+        </div>
+      </section>
 
-      <!-- Section 4: Similar Behaviours (placeholder) -->
+      <!-- Learning Advisor -->
       <div class="panel">
-        <h2>Similar Behaviours
+        <h2>🧠 Learning Advisor</h2>
+
+        <div id="learningAdvisorMessage"
+             style="
+                font-size:16px;
+                line-height:1.8;
+                font-weight:600;
+                color:var(--text);
+             ">
+          Loading...
+        </div>
+      </div>
+
+      <!-- Section 4: Similar Behaviours -->
+      <div class="panel">
+        <h2>
+          Similar Behaviours
           <span style="font-weight:400; color:var(--muted); font-size:11px;">
             (latest historical trades for this symbol)
           </span>
         </h2>
+
         <div class="table-scroll">
           <table id="similarBehavioursTable"></table>
         </div>
       </div>
-    </div>
-  </div>
   <!-- Behaviour Explorer END -->
 </div>
 
