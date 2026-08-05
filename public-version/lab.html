@@ -2271,15 +2271,23 @@ console.log("First row:", rows[0]);
  * @param {BehaviourLearning} learning
  */
 function renderHistoricalLearning(learning){
+
   const matches = document.getElementById('historicalMatches');
   const winRate = document.getElementById('historicalWinRate');
+  const profitFactor = document.getElementById('profitFactor');
   const avgConfidence = document.getElementById('averageConfidence');
-  const avgProfit = document.getElementById('averageProfit');
 
-  if(matches) matches.textContent = behaviourDisplay(learning.historicalMatches);
-  if(winRate) winRate.textContent = behaviourDisplay(learning.historicalWinRate, '%');
-  if(avgConfidence) avgConfidence.textContent = behaviourDisplay(learning.averageConfidence, '%');
-if(avgProfit) avgProfit.textContent = behaviourDisplay(learning.averageProfit);
+  if(matches)
+    matches.textContent = behaviourDisplay(learning.historicalMatches);
+
+  if(winRate)
+    winRate.textContent = behaviourDisplay(learning.historicalWinRate, '%');
+
+  if(profitFactor)
+    profitFactor.textContent = behaviourDisplay(learning.profitFactor);
+
+  if(avgConfidence)
+    avgConfidence.textContent = behaviourDisplay(learning.averageConfidence, '%');
 }
 function renderBehaviourSymbolDropdown(){
   const dropdown = document.getElementById('behaviourSymbolDropdown');
