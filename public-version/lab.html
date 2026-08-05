@@ -2235,9 +2235,29 @@ console.log("First row:", rows[0]);
       <td>${behaviourDisplay(r.symbol)}</td>
       <td>${behaviourDisplay(r.direction)}</td>
       <td>${behaviourDisplay(r.confidence, '%')}</td>
-      <td class="${String(r.result).toLowerCase()==='win' ? 'pos' : (String(r.result).toLowerCase()==='loss' ? 'neg' : '')}">
-        ${behaviourDisplay(String(r.result).toUpperCase())}
-      </td>
+      <td>
+  ${(() => {
+    const result = String(r.result || '').toLowerCase();
+
+    if (result === 'win') {
+      return '<span class="status-badge active">WIN</span>';
+    }
+
+    if (result === 'loss') {
+      return '<span class="status-badge inactive">LOSS</span>';
+    }
+
+    if (result === 'open') {
+      return '<span class="status-badge">OPEN</span>';
+    }
+
+    if (result === 'invalidated') {
+      return '<span class="status-badge">INVALIDATED</span>';
+    }
+
+    return behaviourDisplay(String(r.result).toUpperCase());
+  })()}
+</td>
       <td>${behaviourDisplay(r.duration)}</td>
       <td>${behaviourDisplay(r.mfe)}</td>
       <td>${behaviourDisplay(r.mae)}</td>
