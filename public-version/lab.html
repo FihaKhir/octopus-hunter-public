@@ -2264,15 +2264,67 @@ console.log("First row:", rows[0]);
  * @param {BehaviourLearning} learning
  */
 function renderHistoricalLearning(learning){
+
   const matches = document.getElementById('historicalMatches');
   const winRate = document.getElementById('historicalWinRate');
   const avgConfidence = document.getElementById('averageConfidence');
   const avgProfit = document.getElementById('averageProfit');
+  const advisor = document.getElementById('learningAdvisorMessage');
 
-  if(matches) matches.textContent = behaviourDisplay(learning.historicalMatches);
-  if(winRate) winRate.textContent = behaviourDisplay(learning.historicalWinRate, '%');
-  if(avgConfidence) avgConfidence.textContent = behaviourDisplay(learning.averageConfidence, '%');
-if(avgProfit) avgProfit.textContent = behaviourDisplay(learning.averageProfit);
+  if(matches)
+    matches.textContent = behaviourDisplay(learning.historicalMatches);
+
+  if(winRate)
+    winRate.textContent = behaviourDisplay(learning.historicalWinRate, '%');
+
+  if(avgConfidence)
+    avgConfidence.textContent = behaviourDisplay(learning.averageConfidence, '%');
+
+  if(avgProfit)
+    avgProfit.textContent = behaviourDisplay(learning.averageProfit);
+
+  if(!advisor)
+    return;
+
+  const wr = Number(learning.historicalWinRate || 0);
+  const conf = Number(learning.averageConfidence || 0);
+  const trades = Number(learning.historicalMatches || 0);
+
+  if(trades < 10){
+
+    advisor.innerHTML =
+      "⚪ Not enough historical data.<br><br>" +
+      "Only <b>" + trades + "</b> matching trades have been recorded.";
+
+  }
+  else if(wr >= 70){
+
+    advisor.innerHTML =
+      "🟢 Strong historical behaviour.<br><br>" +
+      "Win Rate: <b>" + wr + "%</b><br>" +
+      "Average Confidence: <b>" + conf + "%</b><br><br>" +
+      "This behaviour has historically produced consistently good results.";
+
+  }
+  else if(wr >= 55){
+
+    advisor.innerHTML =
+      "🟡 Average historical behaviour.<br><br>" +
+      "Win Rate: <b>" + wr + "%</b><br>" +
+      "Average Confidence: <b>" + conf + "%</b><br><br>" +
+      "Use additional confirmation before trusting this setup.";
+
+  }
+  else{
+
+    advisor.innerHTML =
+      "🔴 Weak historical behaviour.<br><br>" +
+      "Win Rate: <b>" + wr + "%</b><br>" +
+      "Average Confidence: <b>" + conf + "%</b><br><br>" +
+      "Historically this behaviour loses more often than it wins.";
+
+  }
+
 }
 function renderBehaviourSymbolDropdown(){
   const dropdown = document.getElementById('behaviourSymbolDropdown');
