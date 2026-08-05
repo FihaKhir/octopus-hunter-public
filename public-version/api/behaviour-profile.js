@@ -111,17 +111,29 @@ const completed = (learningRows || []).filter(
 );
 
 const wins = completed.filter(r => r.outcome === "win").length;
+const losses = completed.length - wins;
+
+const profitFactor =
+  losses === 0
+    ? null
+    : Number((wins / losses).toFixed(2));
+
 json.Learning = {
   historicalMatches: completed.length,
-historicalWinRate: completed.length
-  ? Math.round((wins * 100) / completed.length)
-  : null,
+
+  historicalWinRate: completed.length
+    ? Math.round((wins * 100) / completed.length)
+    : null,
+
+  profitFactor: profitFactor,
+
   averageProfit: null,
+
   averageConfidence: completed.length
-  ? Math.round(
-      completed.reduce((sum, r) => sum + (r.confidence || 0), 0) / completed.length
-    )
-  : null
+    ? Math.round(
+        completed.reduce((sum, r) => sum + (r.confidence || 0), 0) / completed.length
+      )
+    : null
 };
     
     return res.status(200).json(json);
