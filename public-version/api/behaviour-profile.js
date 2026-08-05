@@ -103,20 +103,34 @@ json.SimilarBehaviours = (similarRows || []).map(r => ({
   mae: r.mae
 }));
 
-// Historical Learning
-const total = similarRows ? similarRows.length : 0;
+// ---------------- Historical Learning ----------------
 
 const completed = (learningRows || []).filter(
   r => r.outcome === "win" || r.outcome === "loss"
 );
 
 const wins = completed.filter(r => r.outcome === "win").length;
-const losses = completed.length - wins;
 
-const profitFactor =
-  losses === 0
-    ? null
-    : Number((wins / losses).toFixed(2));
+// Confidence statistics
+const confidenceValues = completed
+  .map(r => Number(r.confidence))
+  .filter(v => !isNaN(v))
+  .sort((a, b) => a - b);
+
+const bestConfidence =
+  confidenceValues.length > 0
+    ? confidenceValues[confidenceValues.length - 1]
+    : null;
+
+const worstConfidence =
+  confidenceValues.length > 0
+    ? confidenceValues[0]
+    : null;
+
+const medianConfidence =
+  confidenceValues.length > 0
+    ? confidenceValues[Math.floor(confidenceValues.length / 2)]
+    : null;
 
 json.Learning = {
   historicalMatches: completed.length,
@@ -125,15 +139,22 @@ json.Learning = {
     ? Math.round((wins * 100) / completed.length)
     : null,
 
-  profitFactor: profitFactor,
-
+  // Deferred until the database stores real trade profit
+  profitFactor: null,
   averageProfit: null,
 
   averageConfidence: completed.length
     ? Math.round(
-        completed.reduce((sum, r) => sum + (r.confidence || 0), 0) / completed.length
+        completed.reduce(
+          (sum, r) => sum + (Number(r.confidence) || 0),
+          0
+        ) / completed.length
       )
-    : null
+    : null,
+
+  bestConfidence,
+  medianConfidence,
+  worstConfidence
 };
     
     return res.status(200).json(json);
