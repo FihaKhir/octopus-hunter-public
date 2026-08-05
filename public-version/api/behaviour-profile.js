@@ -51,7 +51,6 @@ export default async function handler(req, res) {
     }
 
     const newestFile = jsonFiles[0].name;
-
     const filePath = `Profiles/${symbol}/PERIOD_M1/${newestFile}`;
 
     console.log('Loading profile:', filePath);
@@ -69,112 +68,96 @@ export default async function handler(req, res) {
     const buffer = await data.arrayBuffer();
 
     const decoder = new TextDecoder("utf-16le");
-    
     const text = decoder.decode(buffer).replace(/^\uFEFF/, "");
-    
+
     const json = JSON.parse(text);
 
-// Load similar historical trades for this symbol
-const { data: similarRows, error: similarError } = await supabase
-  .from('trade_history')
-  .select('*')
-  .eq('symbol', symbol)
-  .order('opened_at', { ascending: false })
-  .limit(10);
-const { data: learningRows, error: learningError } = await supabase
-  .from('trade_history')
-  .select('outcome, confidence')
-  .eq('symbol', symbol);
-if (similarError) {
-  console.error("Similar trades error:", similarError);
-}
+    // ---------------- Similar Behaviours ----------------
 
-console.log("Similar rows:", similarRows);
+    const { data: similarRows, error: similarError } = await supabase
+      .from('trade_history')
+      .select('*')
+      .eq('symbol', symbol)
+      .order('opened_at', { ascending: false })
+      .limit(10);
 
-// Similar Behaviours
-json.SimilarBehaviours = (similarRows || []).map(r => ({
-  date: new Date(r.opened_at * 1000).toISOString().slice(0, 10),
-  symbol: r.symbol,
-  direction: r.direction,
-  confidence: r.confidence,
-  result: r.outcome,
-  duration: `${Math.round(r.trade_duration_seconds / 60)} min`,
-  mfe: r.mfe,
-  mae: r.mae
-}));
+    const { data: learningRows, error: learningError } = await supabase
+      .from('trade_history')
+      .select('outcome, confidence')
+      .eq('symbol', symbol);
 
-// ---------------- Historical Learning ----------------
+    if (similarError) {
+      console.error("Similar trades error:", similarError);
+    }
 
-const completed = (learningRows || []).filter(
-  r => r.outcome === "win" || r.outcome === "loss"
-);
+    if (learningError) {
+      console.error("Learning rows error:", learningError);
+    }
 
-   const confidences = completed
-  .map(r => Number(r.confidence))
-  .filter(c => !isNaN(c))
-  .sort((a, b) => a - b);
+    json.SimilarBehaviours = (similarRows || []).map(r => ({
+      date: new Date(r.opened_at * 1000).toISOString().slice(0, 10),
+      symbol: r.symbol,
+      direction: r.direction,
+      confidence: r.confidence,
+      result: r.outcome,
+      duration: `${Math.round((r.trade_duration_seconds || 0) / 60)} min`,
+      mfe: r.mfe,
+      mae: r.mae
+    }));
 
-const bestConfidence =
-  confidences.length ? Math.max(...confidences) : null;
+    // ---------------- Historical Learning ----------------
 
-const worstConfidence =
-  confidences.length ? Math.min(...confidences) : null;
+    const completed = (learningRows || []).filter(
+      r => r.outcome === "win" || r.outcome === "loss"
+    );
 
-const medianConfidence =
-  confidences.length
-    ? confidences[Math.floor(confidences.length / 2)]
-    : null; 
-const wins = completed.filter(r => r.outcome === "win").length;
+    const wins = completed.filter(r => r.outcome === "win").length;
 
-// Confidence statistics
-const confidenceValues = completed
-  .map(r => Number(r.confidence))
-  .filter(v => !isNaN(v))
-  .sort((a, b) => a - b);
+    const confidenceValues = completed
+      .map(r => Number(r.confidence))
+      .filter(v => !isNaN(v))
+      .sort((a, b) => a - b);
 
-const bestConfidence =
-  confidenceValues.length > 0
-    ? confidenceValues[confidenceValues.length - 1]
-    : null;
+    const bestConfidence =
+      confidenceValues.length
+        ? confidenceValues[confidenceValues.length - 1]
+        : null;
 
-const worstConfidence =
-  confidenceValues.length > 0
-    ? confidenceValues[0]
-    : null;
+    const worstConfidence =
+      confidenceValues.length
+        ? confidenceValues[0]
+        : null;
 
-const medianConfidence =
-  confidenceValues.length > 0
-    ? confidenceValues[Math.floor(confidenceValues.length / 2)]
-    : null;
+    const medianConfidence =
+      confidenceValues.length
+        ? confidenceValues[Math.floor(confidenceValues.length / 2)]
+        : null;
 
-json.Learning = {
-  historicalMatches: completed.length,
+    json.Learning = {
+      historicalMatches: completed.length,
 
-  historicalWinRate: completed.length
-    ? Math.round((wins * 100) / completed.length)
-    : null,
-  bestConfidence,
-  medianConfidence,
-  worstConfidence,
-  
-  // Deferred until the database stores real trade profit
-  profitFactor: null,
-  averageProfit: null,
+      historicalWinRate: completed.length
+        ? Math.round((wins * 100) / completed.length)
+        : null,
 
-  averageConfidence: completed.length
-    ? Math.round(
-        completed.reduce(
-          (sum, r) => sum + (Number(r.confidence) || 0),
-          0
-        ) / completed.length
-      )
-    : null,
+      averageProfit: null,
 
-  bestConfidence,
-  medianConfidence,
-  worstConfidence
-};
-    
+      profitFactor: null,
+
+      averageConfidence: completed.length
+        ? Math.round(
+            completed.reduce(
+              (sum, r) => sum + (Number(r.confidence) || 0),
+              0
+            ) / completed.length
+          )
+        : null,
+
+      bestConfidence,
+      medianConfidence,
+      worstConfidence
+    };
+
     return res.status(200).json(json);
 
   } catch (err) {
