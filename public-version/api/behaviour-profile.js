@@ -109,6 +109,21 @@ const completed = (learningRows || []).filter(
   r => r.outcome === "win" || r.outcome === "loss"
 );
 
+   const confidences = completed
+  .map(r => Number(r.confidence))
+  .filter(c => !isNaN(c))
+  .sort((a, b) => a - b);
+
+const bestConfidence =
+  confidences.length ? Math.max(...confidences) : null;
+
+const worstConfidence =
+  confidences.length ? Math.min(...confidences) : null;
+
+const medianConfidence =
+  confidences.length
+    ? confidences[Math.floor(confidences.length / 2)]
+    : null; 
 const wins = completed.filter(r => r.outcome === "win").length;
 
 // Confidence statistics
@@ -138,7 +153,10 @@ json.Learning = {
   historicalWinRate: completed.length
     ? Math.round((wins * 100) / completed.length)
     : null,
-
+  bestConfidence,
+  medianConfidence,
+  worstConfidence,
+  
   // Deferred until the database stores real trade profit
   profitFactor: null,
   averageProfit: null,
