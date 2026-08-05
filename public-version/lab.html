@@ -1923,9 +1923,10 @@ function normalizeBehaviourData(raw){
       weekday: behaviourFieldOrNull(summarySrc.weekday)
     },
     dna: {
-      primaryScore: behaviourFieldOrNull(dnaSrc.primaryScore),
-      compressionScore: behaviourFieldOrNull(dnaSrc.compressionScore),
-      velocityScore: behaviourFieldOrNull(dnaSrc.velocityScore)
+        confidence: behaviourFieldOrNull(dnaSrc.confidence),
+        primaryScore: behaviourFieldOrNull(dnaSrc.primaryScore),
+        compressionScore: behaviourFieldOrNull(dnaSrc.compressionScore),
+        velocityScore: behaviourFieldOrNull(dnaSrc.velocityScore)
     },
     interpretation: {
         title: behaviourFieldOrNull(interpretationSrc.title),
