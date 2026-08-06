@@ -1959,17 +1959,21 @@ function normalizeBehaviourData(raw){
         recommendation: behaviourFieldOrNull(interpretationSrc.recommendation)
     },
     learning: {
-  historicalMatches: behaviourFieldOrNull(learningSrc.historicalMatches),
-  historicalWinRate: behaviourFieldOrNull(learningSrc.historicalWinRate),
-  profitFactor: behaviourFieldOrNull(learningSrc.profitFactor),
-
-  averageProfit: behaviourFieldOrNull(learningSrc.averageProfit),
-  averageConfidence: behaviourFieldOrNull(learningSrc.averageConfidence),
-
-  bestConfidence: behaviourFieldOrNull(learningSrc.bestConfidence),
-  medianConfidence: behaviourFieldOrNull(learningSrc.medianConfidence),
-  worstConfidence: behaviourFieldOrNull(learningSrc.worstConfidence)
-},
+        historicalMatches: behaviourFieldOrNull(learningSrc.historicalMatches),
+        historicalWinRate: behaviourFieldOrNull(learningSrc.historicalWinRate),
+      
+        profitFactor: behaviourFieldOrNull(learningSrc.profitFactor),
+      
+        averageProfit: behaviourFieldOrNull(learningSrc.averageProfit),
+        averageConfidence: behaviourFieldOrNull(learningSrc.averageConfidence),
+      
+        averageMfe: behaviourFieldOrNull(learningSrc.averageMfe),
+        averageMae: behaviourFieldOrNull(learningSrc.averageMae),
+      
+        bestConfidence: behaviourFieldOrNull(learningSrc.bestConfidence),
+        medianConfidence: behaviourFieldOrNull(learningSrc.medianConfidence),
+        worstConfidence: behaviourFieldOrNull(learningSrc.worstConfidence)
+      },
     similarBehaviours: similarSrc.map(normalizeSimilarBehaviour)
   };
 }
