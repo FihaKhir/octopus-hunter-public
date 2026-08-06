@@ -202,7 +202,7 @@
         <button class="quick-btn" onclick="exportCSV()">Export CSV</button>
         <button class="quick-btn" onclick="exportJSON()">Export All</button>
         <button class="quick-btn" onclick="toggleAllExpanded()">Collapse All</button>
-    </div>
+      </div>
     </div>
 
     <div class="nav-bar">
@@ -223,6 +223,7 @@
     <div class="wrap">
       <div class="page-head">
         <h1>🧪 Trading Research Dashboard</h1>
+        <button class="quick-btn" onclick="exportDashboard()">Export Dashboard</button>
       </div>
 
       <div id="dashboardSummary" class="summary-grid"></div>
@@ -245,6 +246,10 @@
   <!-- STATISTICS TAB -->
   <div id="statistics" class="tab-container">
     <div class="wrap">
+      <div class="page-head">
+        <h1>📈 Statistics</h1>
+        <button class="quick-btn" onclick="exportStatistics()">Export Statistics</button>
+      </div>
       <div class="panel">
         <h2 id="statsHeading">Full statistics by version</h2>
         <div class="table-scroll">
@@ -257,6 +262,10 @@
   <!-- SYMBOLS TAB -->
   <div id="symbols" class="tab-container">
     <div class="wrap">
+      <div class="page-head">
+        <h1>🎯 Symbols</h1>
+        <button class="quick-btn" onclick="exportSymbols()">Export Symbols</button>
+      </div>
       <div class="panel">
         <h2>Win rate by symbol</h2>
         <div class="table-scroll">
@@ -269,6 +278,10 @@
   <!-- RELEASE TAB -->
   <div id="release" class="tab-container">
     <div class="wrap">
+      <div class="page-head">
+        <h1>🚀 Release</h1>
+        <button class="quick-btn" onclick="exportRelease()">Export Release</button>
+      </div>
       <div class="panel">
         <h2>Release Advisor</h2>
         <div id="releaseAdvisorWrap"></div>
@@ -279,6 +292,10 @@
   <!-- RESEARCH TAB -->
   <div id="research" class="tab-container">
     <div class="wrap">
+      <div class="page-head">
+        <h1>🧪 Research</h1>
+        <button class="quick-btn" onclick="exportResearch()">Export Research</button>
+      </div>
       <div class="panel">
         <h2>Next Experiment</h2>
         <div id="nextExperimentWrap"></div>
@@ -289,6 +306,10 @@
   <!-- INTELLIGENCE TAB -->
   <div id="intelligence" class="tab-container">
     <div class="wrap">
+      <div class="page-head">
+        <h1>🧠 Intelligence</h1>
+        <button class="quick-btn" onclick="exportIntelligence()">Export Intelligence</button>
+      </div>
       <div class="panel">
         <h2>Market Intelligence Engine</h2>
         <div class="subhead">Behaviour Profiles</div>
@@ -313,13 +334,10 @@
   <!-- execution, risk management, or broker interaction of any kind.      -->
   <div id="behaviour" class="tab-container">
     <div class="wrap">
-      <div class="page-head" style="display:flex;justify-content:space-between;align-items:center;">
-  <h1>🧠 Behaviour Explorer</h1>
-
-    <button class="secondary" onclick="exportBehaviourJSON()">
-      Export Behaviour
-    </button>
-  </div>
+      <div class="page-head">
+        <h1>🧠 Behaviour Explorer</h1>
+        <button class="quick-btn" onclick="exportBehaviour()">Export Behaviour</button>
+      </div>
 
       <!-- Section 0: Symbol Selector -->
       <div class="panel">
@@ -1646,6 +1664,194 @@ function exportJSON(){
 function toggleAllExpanded(){
   alert('Collapse/Expand functionality would be implemented based on your specific UI structure.');
 }
+
+/* ============================================================
+   PER-PAGE EXPORT SYSTEM
+   ------------------------------------------------------------
+   Adds one dedicated export button/function per research page,
+   alongside the existing global "Export All" (exportJSON) and
+   "Export CSV" (exportCSV) buttons above, which are unchanged.
+
+   Each exporter reads ONLY data that is already available for
+   its own page (existing global state, or the page's own
+   already-rendered DOM), and writes it out in the shared shape:
+
+     { exportedAt, page, version, data }
+
+   Nothing here touches trading logic, the tab system, Supabase
+   communication, or Behaviour Explorer rendering — it only reads
+   already-rendered output and existing computed state.
+   ============================================================ */
+
+const EXPORT_SCHEMA_VERSION = '1.0';
+
+function buildPageExport(page, data){
+  return {
+    exportedAt: new Date().toISOString(),
+    page: page,
+    version: EXPORT_SCHEMA_VERSION,
+    data: data
+  };
+}
+
+function downloadJSON(filenamePrefix, payload){
+  const json = JSON.stringify(payload, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'lab_' + filenamePrefix + '_export_' + new Date().getTime() + '.json';
+  a.click();
+}
+
+// Reads label/value pairs out of a .summary-grid container's .summary-card children.
+function scrapeSummaryCards(containerId){
+  const el = document.getElementById(containerId);
+  const out = {};
+  if(!el) return out;
+  el.querySelectorAll('.summary-card').forEach(card => {
+    const label = card.querySelector('.label');
+    const value = card.querySelector('.value');
+    if(label && value) out[label.textContent.trim()] = value.textContent.trim();
+  });
+  return out;
+}
+
+// Reads title/body out of every .verdict-card inside a container (handles
+// nested grids like the Release Advisor's KEEP/DISABLE/INSUFFICIENT cards).
+function scrapeVerdictCards(containerId){
+  const el = document.getElementById(containerId);
+  const out = [];
+  if(!el) return out;
+  el.querySelectorAll('.verdict-card').forEach(card => {
+    const title = card.querySelector('.v-title');
+    const body = card.querySelector('.v-body');
+    out.push({
+      title: title ? title.textContent.trim() : null,
+      body: body ? body.textContent.replace(/\s+/g, ' ').trim() : null
+    });
+  });
+  return out;
+}
+
+// Reads a rendered <table> (thead th labels + tbody td text) into plain data.
+function scrapeTable(tableId){
+  const table = document.getElementById(tableId);
+  const out = { headers: [], rows: [] };
+  if(!table) return out;
+  out.headers = Array.from(table.querySelectorAll('thead th')).map(th => th.textContent.trim());
+  out.rows = Array.from(table.querySelectorAll('tbody tr')).map(tr =>
+    Array.from(tr.querySelectorAll('td')).map(td => td.textContent.trim())
+  );
+  return out;
+}
+
+// Reads the Behaviour DNA bars (label + value) exactly as displayed.
+function scrapeDnaBars(containerId){
+  const el = document.getElementById(containerId);
+  const out = [];
+  if(!el) return out;
+  el.querySelectorAll('.dna-bar-row').forEach(row => {
+    const spans = row.querySelectorAll('.dna-bar-label span');
+    if(spans.length >= 2){
+      out.push({ label: spans[0].textContent.trim(), value: spans[1].textContent.trim() });
+    }
+  });
+  return out;
+}
+
+// Reads the Behaviour Explanation lines exactly as displayed.
+function scrapeExplanationLines(containerId){
+  const el = document.getElementById(containerId);
+  if(!el) return [];
+  return Array.from(el.querySelectorAll('.explanation-line')).map(l => l.textContent.trim());
+}
+
+// Reads the Historical Learning stat blocks exactly as displayed.
+function scrapeHistoricalLearning(){
+  const fields = {
+    historicalMatches: 'Historical Matches',
+    historicalWinRate: 'Win Rate',
+    averageConfidence: 'Average Confidence',
+    averageMfe: 'Average MFE',
+    averageMae: 'Average MAE',
+    bestConfidence: 'Best Confidence',
+    medianConfidence: 'Median Confidence',
+    worstConfidence: 'Worst Confidence',
+    profitFactor: 'Profit Factor'
+  };
+  const out = {};
+  Object.keys(fields).forEach(id => {
+    const el = document.getElementById(id);
+    out[fields[id]] = el ? el.textContent.trim() : '—';
+  });
+  return out;
+}
+
+function exportDashboard(){
+  const thresholdsEl = document.getElementById('thresholdsNote');
+  const payload = buildPageExport('Dashboard', {
+    summary: scrapeSummaryCards('dashboardSummary'),
+    thresholdsNote: thresholdsEl ? thresholdsEl.textContent.trim() : '',
+    selectedBaseline: selectedBaseline,
+    verdicts: scrapeVerdictCards('verdictWrap')
+  });
+  downloadJSON('dashboard', payload);
+}
+
+function exportStatistics(){
+  const headingEl = document.getElementById('statsHeading');
+  const payload = buildPageExport('Statistics', {
+    heading: headingEl ? headingEl.textContent.trim() : '',
+    selectedBaseline: selectedBaseline,
+    table: scrapeTable('statsTable')
+  });
+  downloadJSON('statistics', payload);
+}
+
+function exportSymbols(){
+  const payload = buildPageExport('Symbols', {
+    table: scrapeTable('symbolTable')
+  });
+  downloadJSON('symbols', payload);
+}
+
+function exportRelease(){
+  const payload = buildPageExport('Release', {
+    releaseAdvisor: scrapeVerdictCards('releaseAdvisorWrap')
+  });
+  downloadJSON('release', payload);
+}
+
+function exportResearch(){
+  const payload = buildPageExport('Research', {
+    nextExperiments: scrapeVerdictCards('nextExperimentWrap')
+  });
+  downloadJSON('research', payload);
+}
+
+function exportIntelligence(){
+  const payload = buildPageExport('Intelligence', {
+    behaviorProfiles: scrapeVerdictCards('behaviorProfilesWrap'),
+    similarSymbols: scrapeVerdictCards('similarSymbolsWrap'),
+    outliers: scrapeVerdictCards('outliersWrap'),
+    longTermRecommendations: scrapeVerdictCards('longTermRecsWrap')
+  });
+  downloadJSON('intelligence', payload);
+}
+
+function exportBehaviour(){
+  const payload = buildPageExport('Behaviour Explorer', {
+    symbol: currentBehaviourSymbol,
+    summary: scrapeSummaryCards('behaviourSummaryGrid'),
+    dna: scrapeDnaBars('behaviourDnaWrap'),
+    explanation: scrapeExplanationLines('behaviourExplanationWrap'),
+    historicalLearning: scrapeHistoricalLearning(),
+    similarBehaviours: scrapeTable('similarBehavioursTable')
+  });
+  downloadJSON('behaviour', payload);
+}
+/* END PER-PAGE EXPORT SYSTEM */
 
 /* Behaviour Explorer START */
 /* This block is a visualization-only prototype. It contains no trading  */
