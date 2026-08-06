@@ -163,7 +163,8 @@ export default async function handler(req, res) {
       historicalWinRate: completed.length
         ? Math.round((wins * 100) / completed.length)
         : null,
-
+      averageMfe,
+      averageMae,
       averageProfit: null,
 
       profitFactor: null,
