@@ -112,7 +112,31 @@ export default async function handler(req, res) {
     );
 
     const wins = completed.filter(r => r.outcome === "win").length;
-
+    const validMfe = completed
+      .map(r => Number(r.mfe))
+      .filter(v => !isNaN(v));
+    
+    const validMae = completed
+      .map(r => Number(r.mae))
+      .filter(v => !isNaN(v));
+    
+    const averageMfe = validMfe.length
+      ? Number(
+          (
+            validMfe.reduce((a, b) => a + b, 0) /
+            validMfe.length
+          ).toFixed(2)
+        )
+      : null;
+    
+    const averageMae = validMae.length
+      ? Number(
+          (
+            validMae.reduce((a, b) => a + b, 0) /
+            validMae.length
+          ).toFixed(2)
+        )
+      : null;
     const confidenceValues = completed
       .map(r => Number(r.confidence))
       .filter(v => !isNaN(v))
