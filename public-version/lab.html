@@ -1817,19 +1817,22 @@ function mapSupabaseRowToBehaviourData(data) {
         `This profile is intended for research and comparison with historical market behaviour rather than generating trading decisions.`
     },
 
-  learning: {
-  historicalMatches: data.Learning?.historicalMatches ?? null,
-  historicalWinRate: data.Learning?.historicalWinRate ?? null,
-
-  profitFactor: data.Learning?.profitFactor ?? null,
-
-  averageProfit: data.Learning?.averageProfit ?? null,
-  averageConfidence: data.Learning?.averageConfidence ?? null,
-
-  bestConfidence: data.Learning?.bestConfidence ?? null,
-  medianConfidence: data.Learning?.medianConfidence ?? null,
-  worstConfidence: data.Learning?.worstConfidence ?? null
-},
+      learning: {
+        historicalMatches: data.Learning?.historicalMatches ?? null,
+        historicalWinRate: data.Learning?.historicalWinRate ?? null,
+      
+        profitFactor: data.Learning?.profitFactor ?? null,
+      
+        averageProfit: data.Learning?.averageProfit ?? null,
+        averageConfidence: data.Learning?.averageConfidence ?? null,
+      
+        averageMfe: data.Learning?.averageMfe ?? null,
+        averageMae: data.Learning?.averageMae ?? null,
+      
+        bestConfidence: data.Learning?.bestConfidence ?? null,
+        medianConfidence: data.Learning?.medianConfidence ?? null,
+        worstConfidence: data.Learning?.worstConfidence ?? null
+      },
 
     similarBehaviours: (data.SimilarBehaviours || []).map(item => ({
       profileId: item.profileId || null,
