@@ -82,9 +82,9 @@ export default async function handler(req, res) {
       .limit(10);
 
     const { data: learningRows, error: learningError } = await supabase
-      .from('trade_history')
-      .select('outcome, confidence')
-      .eq('symbol', symbol);
+  .from('trade_history')
+  .select('outcome, confidence, mfe, mae')
+  .eq('symbol', symbol);
 
     if (similarError) {
       console.error("Similar trades error:", similarError);
