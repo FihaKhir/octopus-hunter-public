@@ -2321,8 +2321,16 @@ function renderHistoricalLearning(learning){
 
   const matches = document.getElementById('historicalMatches');
   const winRate = document.getElementById('historicalWinRate');
-  const profitFactor = document.getElementById('profitFactor');
   const avgConfidence = document.getElementById('averageConfidence');
+
+  const avgMfe = document.getElementById('averageMfe');
+  const avgMae = document.getElementById('averageMae');
+
+  const profitFactor = document.getElementById('profitFactor');
+
+  const bestConfidence = document.getElementById('bestConfidence');
+  const medianConfidence = document.getElementById('medianConfidence');
+  const worstConfidence = document.getElementById('worstConfidence');
 
   if(matches)
     matches.textContent = behaviourDisplay(learning.historicalMatches);
@@ -2330,11 +2338,26 @@ function renderHistoricalLearning(learning){
   if(winRate)
     winRate.textContent = behaviourDisplay(learning.historicalWinRate, '%');
 
+  if(avgConfidence)
+    avgConfidence.textContent = behaviourDisplay(learning.averageConfidence, '%');
+
+  if(avgMfe)
+    avgMfe.textContent = behaviourDisplay(learning.averageMfe);
+
+  if(avgMae)
+    avgMae.textContent = behaviourDisplay(learning.averageMae);
+
   if(profitFactor)
     profitFactor.textContent = behaviourDisplay(learning.profitFactor);
 
-  if(avgConfidence)
-    avgConfidence.textContent = behaviourDisplay(learning.averageConfidence, '%');
+  if(bestConfidence)
+    bestConfidence.textContent = behaviourDisplay(learning.bestConfidence, '%');
+
+  if(medianConfidence)
+    medianConfidence.textContent = behaviourDisplay(learning.medianConfidence, '%');
+
+  if(worstConfidence)
+    worstConfidence.textContent = behaviourDisplay(learning.worstConfidence, '%');
 }
 function renderBehaviourSymbolDropdown(){
   const dropdown = document.getElementById('behaviourSymbolDropdown');
