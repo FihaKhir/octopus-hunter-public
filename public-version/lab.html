@@ -1246,8 +1246,77 @@ const SIMILARITY_KEYS = ['trendStrength','volatility','consistency','tradeStabil
 
   if(!scope) return;
 
-  scope.textContent =
-    `Data loaded successfully: ${allRows.length} signals.`;
+  const resolvedRows = allRows.filter(r =>
+    (r.outcome === 'win' || r.outcome === 'loss') &&
+    r.confidence != null &&
+    !isNaN(Number(r.confidence))
+  );
+
+  const buckets = [
+    { label: '<50', min: -Infinity, max: 50 },
+    { label: '50–59', min: 50, max: 60 },
+    { label: '60–69', min: 60, max: 70 },
+    { label: '70–79', min: 70, max: 80 },
+    { label: '80–89', min: 80, max: 90 },
+    { label: '90–100', min: 90, max: Infinity }
+  ];
+
+  const results = buckets.map(bucket => {
+    const bucketRows = resolvedRows.filter(r => {
+      const confidence = Number(r.confidence);
+      return confidence >= bucket.min && confidence < bucket.max;
+    });
+
+    const wins = bucketRows.filter(r => r.outcome === 'win').length;
+    const losses = bucketRows.filter(r => r.outcome === 'loss').length;
+    const trades = wins + losses;
+
+    return {
+      label: bucket.label,
+      trades,
+      wins,
+      losses,
+      winRate: trades > 0 ? (wins / trades) * 100 : null
+    };
+  });
+
+  scope.innerHTML = `
+    <div style="margin-bottom:14px;">
+      <b>${resolvedRows.length}</b> resolved trades included in the analysis.
+    </div>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Confidence</th>
+            <th>Trades</th>
+            <th>Wins</th>
+            <th>Losses</th>
+            <th>Win Rate</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${results.map(r => `
+            <tr>
+              <td><b>${r.label}</b></td>
+              <td>${r.trades}</td>
+              <td>${r.wins}</td>
+              <td>${r.losses}</td>
+              <td>
+                ${r.winRate == null ? '—' : r.winRate.toFixed(1) + '%'}
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="thresholds-note" style="margin-top:14px;">
+      Only resolved WIN/LOSS trades are included.
+      Invalidated and open signals are excluded.
+    </div>
+  `;
 }
 
 function stdDevOf(arr){
