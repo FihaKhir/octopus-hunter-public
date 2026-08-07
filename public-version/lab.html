@@ -1261,8 +1261,7 @@ const SIMILARITY_KEYS = ['trendStrength','volatility','consistency','tradeStabil
   const directions = ['BUY', 'SELL'];
 
   if(symbols.length === 0){
-    scope.innerHTML =
-      '<div class="thresholds-note">No resolved trade data available.</div>';
+    scope.innerHTML = 'No resolved trade data available.';
     return;
   }
 
@@ -1283,6 +1282,17 @@ const SIMILARITY_KEYS = ['trendStrength','volatility','consistency','tradeStabil
   window.confidenceAnalysisSymbol = selectedSymbol;
   window.confidenceAnalysisDirection = selectedDirection;
 
+  const getDirection = r => {
+    const rawSide = String(
+      r.side ?? r.Side ?? r.direction ?? ''
+    ).toUpperCase();
+
+    if(rawSide === 'UP') return 'BUY';
+    if(rawSide === 'DOWN') return 'SELL';
+
+    return rawSide;
+  };
+
   const buckets = [
     { label: '<50', min: -Infinity, max: 50 },
     { label: '50–59', min: 50, max: 60 },
@@ -1297,18 +1307,11 @@ const SIMILARITY_KEYS = ['trendStrength','volatility','consistency','tradeStabil
       selectedSymbol === 'ALL' ||
       r.symbol === selectedSymbol;
 
-    const rawSide = String(
-  r.side ?? r.Side ?? r.direction ?? ''
-).toUpperCase();
+    const direction = getDirection(r);
 
-const direction =
-  rawSide === 'UP' ? 'BUY' :
-  rawSide === 'DOWN' ? 'SELL' :
-  rawSide;
-
-const directionMatch =
-  selectedDirection === 'ALL' ||
-  direction === selectedDirection;
+    const directionMatch =
+      selectedDirection === 'ALL' ||
+      direction === selectedDirection;
 
     return symbolMatch && directionMatch;
   });
@@ -1316,7 +1319,9 @@ const directionMatch =
   const results = buckets.map(bucket => {
     const bucketRows = filteredRows.filter(r => {
       const confidence = Number(r.confidence);
-      return confidence >= bucket.min && confidence < bucket.max;
+
+      return confidence >= bucket.min &&
+             confidence < bucket.max;
     });
 
     const wins = bucketRows.filter(r => r.outcome === 'win').length;
@@ -1332,65 +1337,118 @@ const directionMatch =
     };
   });
 
+  // ---------------------------------------------------------
+  // SYMBOL INTELLIGENCE MATRIX
+  // ---------------------------------------------------------
+
+  const getDirectionStats = (symbol, direction) => {
+    const rows = resolvedRows.filter(r =>
+      r.symbol === symbol &&
+      getDirection(r) === direction
+    );
+
+    const wins = rows.filter(r => r.outcome === 'win').length;
+    const losses = rows.filter(r => r.outcome === 'loss').length;
+    const trades = wins + losses;
+
+    return {
+      trades,
+      wins,
+      losses,
+      winRate: trades > 0 ? (wins / trades) * 100 : null
+    };
+  };
+
+  const matrix = symbols.map(symbol => {
+    const buy = getDirectionStats(symbol, 'BUY');
+    const sell = getDirectionStats(symbol, 'SELL');
+
+    let best = 'NO DATA';
+
+    if(buy.winRate != null && sell.winRate != null){
+      best = buy.winRate > sell.winRate
+        ? 'BUY'
+        : sell.winRate > buy.winRate
+          ? 'SELL'
+          : 'TIE';
+    } else if(buy.winRate != null){
+      best = 'BUY';
+    } else if(sell.winRate != null){
+      best = 'SELL';
+    }
+
+    return {
+      symbol,
+      buy,
+      sell,
+      best
+    };
+  });
+
   scope.innerHTML = `
-    <div style="margin-bottom:14px; display:flex; gap:18px; flex-wrap:wrap; align-items:center;">
 
-      <div>
-        <label for="confidenceSymbolSelect">
-          <b>Symbol:</b>
-        </label>
+    <div style="margin-bottom:18px;">
 
-        <select
-          id="confidenceSymbolSelect"
-          class="select"
-          onchange="
-            window.confidenceAnalysisSymbol=this.value;
-            renderConfidenceAnalysis();
-          "
-          style="margin-left:8px;"
-        >
-          <option value="ALL" ${selectedSymbol === 'ALL' ? 'selected' : ''}>
-            All Symbols
-          </option>
+      <div style="display:flex; gap:20px; flex-wrap:wrap;">
 
-          ${symbols.map(symbol => `
-            <option
-              value="${symbol}"
-              ${selectedSymbol === symbol ? 'selected' : ''}
-            >
-              ${symbol}
+        <div>
+          <label for="confidenceSymbolSelect">
+            <b>Symbol:</b>
+          </label>
+
+          <select
+            id="confidenceSymbolSelect"
+            class="select"
+            onchange="
+              window.confidenceAnalysisSymbol=this.value;
+              renderConfidenceAnalysis();
+            "
+            style="margin-left:8px;"
+          >
+            <option value="ALL" ${selectedSymbol === 'ALL' ? 'selected' : ''}>
+              All Symbols
             </option>
-          `).join('')}
-        </select>
-      </div>
 
-      <div>
-        <label for="confidenceDirectionSelect">
-          <b>Direction:</b>
-        </label>
+            ${symbols.map(symbol => `
+              <option
+                value="${symbol}"
+                ${selectedSymbol === symbol ? 'selected' : ''}
+              >
+                ${symbol}
+              </option>
+            `).join('')}
+          </select>
+        </div>
 
-        <select
-          id="confidenceDirectionSelect"
-          class="select"
-          onchange="
-            window.confidenceAnalysisDirection=this.value;
-            renderConfidenceAnalysis();
-          "
-          style="margin-left:8px;"
-        >
-          <option value="ALL" ${selectedDirection === 'ALL' ? 'selected' : ''}>
-            All Directions
-          </option>
+        <div>
+          <label for="confidenceDirectionSelect">
+            <b>Direction:</b>
+          </label>
 
-          ${directions.map(direction => `
-            <option
-              value="${direction}"
-              ${selectedDirection === direction ? 'selected' : ''}
-            >
-              ${direction}
+          <select
+            id="confidenceDirectionSelect"
+            class="select"
+            onchange="
+              window.confidenceAnalysisDirection=this.value;
+              renderConfidenceAnalysis();
+            "
+            style="margin-left:8px;"
+          >
+            <option value="ALL" ${selectedDirection === 'ALL' ? 'selected' : ''}>
+              All Directions
             </option>
-          `).join('')}
-        </select>
+
+            ${directions.map(direction => `
+              <option
+                value="${direction}"
+                ${selectedDirection === direction ? 'selected' : ''}
+              >
+                ${direction}
+              </option>
+            `).join('')}
+          </select>
+        </div>
+
       </div>
 
     </div>
@@ -1406,7 +1464,9 @@ const directionMatch =
     </div>
 
     <div class="table-scroll">
+
       <table>
+
         <thead>
           <tr>
             <th>Confidence</th>
@@ -1418,6 +1478,7 @@ const directionMatch =
         </thead>
 
         <tbody>
+
           ${results.map(r => `
             <tr>
               <td><b>${r.label}</b></td>
@@ -1431,14 +1492,76 @@ const directionMatch =
               </td>
             </tr>
           `).join('')}
+
         </tbody>
+
       </table>
+
     </div>
 
     <div class="thresholds-note" style="margin-top:14px;">
       Only resolved WIN/LOSS trades are included.
       Invalidated and open signals are excluded.
     </div>
+
+    <hr style="margin:28px 0;">
+
+    <h3>Symbol Intelligence Matrix</h3>
+
+    <div class="thresholds-note" style="margin-bottom:14px;">
+      Historical performance by symbol and direction.
+      This is research data only — it does not change EA trading logic.
+    </div>
+
+    <div class="table-scroll">
+
+      <table>
+
+        <thead>
+          <tr>
+            <th>Symbol</th>
+            <th>BUY Trades</th>
+            <th>BUY Win Rate</th>
+            <th>SELL Trades</th>
+            <th>SELL Win Rate</th>
+            <th>Historical Best</th>
+          </tr>
+        </thead>
+
+        <tbody>
+
+          ${matrix.map(row => `
+            <tr>
+
+              <td><b>${row.symbol}</b></td>
+
+              <td>${row.buy.trades}</td>
+
+              <td>
+                ${row.buy.winRate == null
+                  ? '—'
+                  : row.buy.winRate.toFixed(1) + '%'}
+              </td>
+
+              <td>${row.sell.trades}</td>
+
+              <td>
+                ${row.sell.winRate == null
+                  ? '—'
+                  : row.sell.winRate.toFixed(1) + '%'}
+              </td>
+
+              <td><b>${row.best}</b></td>
+
+            </tr>
+          `).join('')}
+
+        </tbody>
+
+      </table>
+
+    </div>
+
   `;
 }
 function stdDevOf(arr){
