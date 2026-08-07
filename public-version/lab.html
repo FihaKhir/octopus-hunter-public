@@ -1240,6 +1240,15 @@ const BEHAVIOR_SCORE_WEIGHTS = {
 
 const SIMILARITY_KEYS = ['trendStrength','volatility','consistency','tradeStability',
   'winLossStability','confidenceStability','riskEfficiency','profitEfficiency','signalFrequency'];
+  
+  function renderConfidenceAnalysis(){
+  const scope = document.getElementById('confidenceAnalysisScope');
+
+  if(!scope) return;
+
+  scope.textContent =
+    `Data loaded successfully: ${allRows.length} signals.`;
+}
 
 function stdDevOf(arr){
   if(arr.length === 0) return null;
