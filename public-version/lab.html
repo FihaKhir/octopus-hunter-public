@@ -1297,12 +1297,18 @@ const SIMILARITY_KEYS = ['trendStrength','volatility','consistency','tradeStabil
       selectedSymbol === 'ALL' ||
       r.symbol === selectedSymbol;
 
-    const direction =
-      String(r.direction || '').toUpperCase();
+    const rawSide = String(
+  r.side ?? r.Side ?? r.direction ?? ''
+).toUpperCase();
 
-    const directionMatch =
-      selectedDirection === 'ALL' ||
-      direction === selectedDirection;
+const direction =
+  rawSide === 'UP' ? 'BUY' :
+  rawSide === 'DOWN' ? 'SELL' :
+  rawSide;
+
+const directionMatch =
+  selectedDirection === 'ALL' ||
+  direction === selectedDirection;
 
     return symbolMatch && directionMatch;
   });
