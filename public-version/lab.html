@@ -1258,18 +1258,34 @@ const SIMILARITY_KEYS = ['trendStrength','volatility','consistency','tradeStabil
       .filter(Boolean)
   )].sort();
 
+  const directions = [...new Set(
+    resolvedRows
+      .map(r => String(r.direction || '').toUpperCase())
+      .filter(d => d === 'BUY' || d === 'SELL')
+  )].sort();
+
   if(symbols.length === 0){
-    scope.innerHTML = '<div class="thresholds-note">No resolved trade data available.</div>';
+    scope.innerHTML =
+      '<div class="thresholds-note">No resolved trade data available.</div>';
     return;
   }
 
   const selectedSymbol =
     window.confidenceAnalysisSymbol &&
-    symbols.includes(window.confidenceAnalysisSymbol)
+    (window.confidenceAnalysisSymbol === 'ALL' ||
+     symbols.includes(window.confidenceAnalysisSymbol))
       ? window.confidenceAnalysisSymbol
       : 'ALL';
 
+  const selectedDirection =
+    window.confidenceAnalysisDirection &&
+    (window.confidenceAnalysisDirection === 'ALL' ||
+     directions.includes(window.confidenceAnalysisDirection))
+      ? window.confidenceAnalysisDirection
+      : 'ALL';
+
   window.confidenceAnalysisSymbol = selectedSymbol;
+  window.confidenceAnalysisDirection = selectedDirection;
 
   const buckets = [
     { label: '<50', min: -Infinity, max: 50 },
@@ -1280,9 +1296,20 @@ const SIMILARITY_KEYS = ['trendStrength','volatility','consistency','tradeStabil
     { label: '90–100', min: 90, max: Infinity }
   ];
 
-  const filteredRows = selectedSymbol === 'ALL'
-    ? resolvedRows
-    : resolvedRows.filter(r => r.symbol === selectedSymbol);
+  const filteredRows = resolvedRows.filter(r => {
+    const symbolMatch =
+      selectedSymbol === 'ALL' ||
+      r.symbol === selectedSymbol;
+
+    const direction =
+      String(r.direction || '').toUpperCase();
+
+    const directionMatch =
+      selectedDirection === 'ALL' ||
+      direction === selectedDirection;
+
+    return symbolMatch && directionMatch;
+  });
 
   const results = buckets.map(bucket => {
     const bucketRows = filteredRows.filter(r => {
@@ -1304,31 +1331,76 @@ const SIMILARITY_KEYS = ['trendStrength','volatility','consistency','tradeStabil
   });
 
   scope.innerHTML = `
-    <div style="margin-bottom:14px;">
-      <label for="confidenceSymbolSelect"><b>Symbol:</b></label>
-      <select
-        id="confidenceSymbolSelect"
-        class="select"
-        onchange="window.confidenceAnalysisSymbol=this.value; renderConfidenceAnalysis();"
-        style="margin-left:8px;"
-      >
-        <option value="ALL" ${selectedSymbol === 'ALL' ? 'selected' : ''}>
-          All Symbols
-        </option>
+    <div style="margin-bottom:14px; display:flex; gap:18px; flex-wrap:wrap; align-items:center;">
 
-        ${symbols.map(symbol => `
-          <option value="${symbol}" ${selectedSymbol === symbol ? 'selected' : ''}>
-            ${symbol}
+      <div>
+        <label for="confidenceSymbolSelect">
+          <b>Symbol:</b>
+        </label>
+
+        <select
+          id="confidenceSymbolSelect"
+          class="select"
+          onchange="
+            window.confidenceAnalysisSymbol=this.value;
+            renderConfidenceAnalysis();
+          "
+          style="margin-left:8px;"
+        >
+          <option value="ALL" ${selectedSymbol === 'ALL' ? 'selected' : ''}>
+            All Symbols
           </option>
-        `).join('')}
-      </select>
+
+          ${symbols.map(symbol => `
+            <option
+              value="${symbol}"
+              ${selectedSymbol === symbol ? 'selected' : ''}
+            >
+              ${symbol}
+            </option>
+          `).join('')}
+        </select>
+      </div>
+
+      <div>
+        <label for="confidenceDirectionSelect">
+          <b>Direction:</b>
+        </label>
+
+        <select
+          id="confidenceDirectionSelect"
+          class="select"
+          onchange="
+            window.confidenceAnalysisDirection=this.value;
+            renderConfidenceAnalysis();
+          "
+          style="margin-left:8px;"
+        >
+          <option value="ALL" ${selectedDirection === 'ALL' ? 'selected' : ''}>
+            All Directions
+          </option>
+
+          ${directions.map(direction => `
+            <option
+              value="${direction}"
+              ${selectedDirection === direction ? 'selected' : ''}
+            >
+              ${direction}
+            </option>
+          `).join('')}
+        </select>
+      </div>
+
     </div>
 
     <div class="thresholds-note" style="margin-bottom:14px;">
       <b>${filteredRows.length}</b> resolved trades included
       ${selectedSymbol === 'ALL'
-        ? 'across all symbols.'
-        : `for <b>${selectedSymbol}</b>.`}
+        ? 'across all symbols'
+        : `for <b>${selectedSymbol}</b>`}
+      ${selectedDirection === 'ALL'
+        ? ''
+        : ` using <b>${selectedDirection}</b> direction`}.
     </div>
 
     <div class="table-scroll">
@@ -1351,7 +1423,9 @@ const SIMILARITY_KEYS = ['trendStrength','volatility','consistency','tradeStabil
               <td>${r.wins}</td>
               <td>${r.losses}</td>
               <td>
-                ${r.winRate == null ? '—' : r.winRate.toFixed(1) + '%'}
+                ${r.winRate == null
+                  ? '—'
+                  : r.winRate.toFixed(1) + '%'}
               </td>
             </tr>
           `).join('')}
