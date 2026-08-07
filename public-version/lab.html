@@ -1258,11 +1258,7 @@ const SIMILARITY_KEYS = ['trendStrength','volatility','consistency','tradeStabil
       .filter(Boolean)
   )].sort();
 
-  const directions = [...new Set(
-    resolvedRows
-      .map(r => String(r.direction || '').toUpperCase())
-      .filter(d => d === 'BUY' || d === 'SELL')
-  )].sort();
+  const directions = ['BUY', 'SELL'];
 
   if(symbols.length === 0){
     scope.innerHTML =
