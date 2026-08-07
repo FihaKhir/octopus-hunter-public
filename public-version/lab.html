@@ -1241,7 +1241,7 @@ const BEHAVIOR_SCORE_WEIGHTS = {
 const SIMILARITY_KEYS = ['trendStrength','volatility','consistency','tradeStability',
   'winLossStability','confidenceStability','riskEfficiency','profitEfficiency','signalFrequency'];
   
-  function renderConfidenceAnalysis(){
+ function renderConfidenceAnalysis(){
   const scope = document.getElementById('confidenceAnalysisScope');
 
   if(!scope) return;
@@ -1252,6 +1252,25 @@ const SIMILARITY_KEYS = ['trendStrength','volatility','consistency','tradeStabil
     !isNaN(Number(r.confidence))
   );
 
+  const symbols = [...new Set(
+    resolvedRows
+      .map(r => r.symbol)
+      .filter(Boolean)
+  )].sort();
+
+  if(symbols.length === 0){
+    scope.innerHTML = '<div class="thresholds-note">No resolved trade data available.</div>';
+    return;
+  }
+
+  const selectedSymbol =
+    window.confidenceAnalysisSymbol &&
+    symbols.includes(window.confidenceAnalysisSymbol)
+      ? window.confidenceAnalysisSymbol
+      : 'ALL';
+
+  window.confidenceAnalysisSymbol = selectedSymbol;
+
   const buckets = [
     { label: '<50', min: -Infinity, max: 50 },
     { label: '50–59', min: 50, max: 60 },
@@ -1261,8 +1280,12 @@ const SIMILARITY_KEYS = ['trendStrength','volatility','consistency','tradeStabil
     { label: '90–100', min: 90, max: Infinity }
   ];
 
+  const filteredRows = selectedSymbol === 'ALL'
+    ? resolvedRows
+    : resolvedRows.filter(r => r.symbol === selectedSymbol);
+
   const results = buckets.map(bucket => {
-    const bucketRows = resolvedRows.filter(r => {
+    const bucketRows = filteredRows.filter(r => {
       const confidence = Number(r.confidence);
       return confidence >= bucket.min && confidence < bucket.max;
     });
@@ -1282,7 +1305,30 @@ const SIMILARITY_KEYS = ['trendStrength','volatility','consistency','tradeStabil
 
   scope.innerHTML = `
     <div style="margin-bottom:14px;">
-      <b>${resolvedRows.length}</b> resolved trades included in the analysis.
+      <label for="confidenceSymbolSelect"><b>Symbol:</b></label>
+      <select
+        id="confidenceSymbolSelect"
+        class="select"
+        onchange="window.confidenceAnalysisSymbol=this.value; renderConfidenceAnalysis();"
+        style="margin-left:8px;"
+      >
+        <option value="ALL" ${selectedSymbol === 'ALL' ? 'selected' : ''}>
+          All Symbols
+        </option>
+
+        ${symbols.map(symbol => `
+          <option value="${symbol}" ${selectedSymbol === symbol ? 'selected' : ''}>
+            ${symbol}
+          </option>
+        `).join('')}
+      </select>
+    </div>
+
+    <div class="thresholds-note" style="margin-bottom:14px;">
+      <b>${filteredRows.length}</b> resolved trades included
+      ${selectedSymbol === 'ALL'
+        ? 'across all symbols.'
+        : `for <b>${selectedSymbol}</b>.`}
     </div>
 
     <div class="table-scroll">
@@ -1296,6 +1342,7 @@ const SIMILARITY_KEYS = ['trendStrength','volatility','consistency','tradeStabil
             <th>Win Rate</th>
           </tr>
         </thead>
+
         <tbody>
           ${results.map(r => `
             <tr>
@@ -1318,7 +1365,6 @@ const SIMILARITY_KEYS = ['trendStrength','volatility','consistency','tradeStabil
     </div>
   `;
 }
-
 function stdDevOf(arr){
   if(arr.length === 0) return null;
   const mean = arr.reduce((a,b) => a+b, 0) / arr.length;
