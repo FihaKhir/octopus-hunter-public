@@ -450,6 +450,16 @@
           <table id="similarBehavioursTable"></table>
         </div>
       </div>
+
+      <!-- Section 5: Entry Snapshot (additive, descriptive-only) -->
+      <div class="panel">
+        <h2>Entry Snapshot
+          <span style="font-weight:400; color:var(--muted); font-size:11px;">
+            (descriptive stats from the 7 verified _at_entry fields — selected symbol)
+          </span>
+        </h2>
+        <div id="entrySnapshotWrap"></div>
+      </div>
     </div>
   </div>
   <!-- Behaviour Explorer END -->
@@ -637,6 +647,7 @@ function renderAll(){
   renderNextExperiments();
   renderConfidenceAnalysis();
   renderMarketIntelligence();
+  renderEntrySnapshot();
 }
 
 function renderDashboard(){
@@ -1057,6 +1068,208 @@ function computeFamilyBreakdown(version){
     out[fam] = computeVersionStats(rows.filter(r => r.family === fam));
   });
   return out;
+}
+
+/**
+ * Entry Snapshot (additive, descriptive-only analysis layer)
+ * ------------------------------------------------------------
+ * Reads the existing `allRows` dataset, scoped to the currently
+ * selected Behaviour Explorer symbol (`currentBehaviourSymbol` —
+ * the same selected-symbol context Behaviour Explorer already uses).
+ * Uses ONLY the 7 verified/trustworthy `_at_entry` fields. Deliberately excludes
+ * `time_since_spike_at_entry` and `family_score_at_entry` — both are
+ * currently populated from the same `primaryScore` value in
+ * OctopusHunterPublic.mq5's SendSignal() (primaryScore is documented
+ * as TrendQuality), so they are duplicated/mislabeled and not
+ * independently meaningful yet.
+ *
+ * This layer computes plain descriptive statistics only — no
+ * predictive formulas, thresholds, correlations, or trading rules.
+ * It does not modify, call, or depend on any DNA/MIE calculation.
+ */
+const ENTRY_SNAPSHOT_FIELDS = [
+  { key: 'atr_at_entry', label: 'ATR at Entry' },
+  { key: 'baseline_atr_at_entry', label: 'Baseline ATR at Entry' },
+  { key: 'compression_at_entry', label: 'Compression at Entry' },
+  { key: 'velocity_at_entry', label: 'Velocity at Entry' },
+  { key: 'ticks_since_jump_at_entry', label: 'Ticks Since Jump at Entry' },
+  { key: 'expected_gap_ticks_at_entry', label: 'Expected Gap Ticks at Entry' }
+];
+
+function entrySnapshotFieldStats(resolvedRows, key){
+  const wins = resolvedRows.filter(r => r.outcome === 'win' && r[key] != null);
+  const losses = resolvedRows.filter(r => r.outcome === 'loss' && r[key] != null);
+  const avg = arr => arr.length ? arr.reduce((a, r) => a + r[key], 0) / arr.length : null;
+  return {
+    winCount: wins.length,
+    lossCount: losses.length,
+    avgWin: avg(wins),
+    avgLoss: avg(losses)
+  };
+}
+
+function entrySnapshotAtrRatio(row){
+  if(row.atr_at_entry == null || row.baseline_atr_at_entry == null || row.baseline_atr_at_entry === 0) return null;
+  return row.atr_at_entry / row.baseline_atr_at_entry;
+}
+
+function entrySnapshotConfirmationsBuckets(resolvedRows){
+  const buckets = { 0: { wins: 0, losses: 0 }, 1: { wins: 0, losses: 0 }, 2: { wins: 0, losses: 0 }, 3: { wins: 0, losses: 0 } };
+  resolvedRows.forEach(r => {
+    const c = r.confirmations_at_entry;
+    if(c == null) return;
+    if(!buckets[c]) buckets[c] = { wins: 0, losses: 0 }; // safety net if data ever exceeds 0-3
+    if(r.outcome === 'win') buckets[c].wins++;
+    else if(r.outcome === 'loss') buckets[c].losses++;
+  });
+  return buckets;
+}
+
+function computeEntrySnapshotFamilyBreakdown(resolvedRows){
+  const families = [...new Set(resolvedRows.map(r => r.family).filter(Boolean))];
+  const out = {};
+  families.forEach(fam => {
+    const rows = resolvedRows.filter(r => r.family === fam);
+    const wins = rows.filter(r => r.outcome === 'win').length;
+    const losses = rows.filter(r => r.outcome === 'loss').length;
+    const resolved = wins + losses;
+    out[fam] = {
+      resolved, wins, losses,
+      winRatePct: resolved > 0 ? (wins / resolved) * 100 : null,
+      lowSample: resolved < MIN_SYMBOL_SAMPLE
+    };
+  });
+  return out;
+}
+
+function computeEntrySnapshot(){
+  const symbolRows = allRows.filter(r => r.symbol === currentBehaviourSymbol);
+  const resolvedRows = symbolRows.filter(r => r.outcome === 'win' || r.outcome === 'loss');
+
+  const fieldStats = ENTRY_SNAPSHOT_FIELDS.map(f => ({
+    ...f,
+    ...entrySnapshotFieldStats(resolvedRows, f.key)
+  }));
+
+  const ratioWins = resolvedRows.filter(r => r.outcome === 'win').map(entrySnapshotAtrRatio).filter(v => v != null);
+  const ratioLosses = resolvedRows.filter(r => r.outcome === 'loss').map(entrySnapshotAtrRatio).filter(v => v != null);
+  const avg = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+
+  return {
+    symbol: currentBehaviourSymbol,
+    totalCount: symbolRows.length,
+    resolvedCount: resolvedRows.length,
+    fieldStats,
+    atrRatio: {
+      avgWin: avg(ratioWins), avgLoss: avg(ratioLosses),
+      winCount: ratioWins.length, lossCount: ratioLosses.length
+    },
+    confirmationsBuckets: entrySnapshotConfirmationsBuckets(resolvedRows),
+    familyBreakdown: computeEntrySnapshotFamilyBreakdown(resolvedRows)
+  };
+}
+
+function renderEntrySnapshot(){
+  const wrap = document.getElementById('entrySnapshotWrap');
+  if(!wrap) return;
+
+  if(!allRows || allRows.length === 0){
+    wrap.innerHTML = '<div class="empty-note">No trade history loaded yet.</div>';
+    return;
+  }
+
+  const snap = computeEntrySnapshot();
+
+  if(snap.resolvedCount === 0){
+    wrap.innerHTML = `<div class="empty-note">No resolved (win/loss) trades yet for ${snap.symbol} — ${snap.totalCount} total signal(s) on file.</div>`;
+    return;
+  }
+
+  const fieldRows = snap.fieldStats.map(f => `
+    <tr>
+      <td>${f.label}</td>
+      <td>${fmtNum(f.avgWin, 4)}</td>
+      <td>${fmtNum(f.avgLoss, 4)}</td>
+      <td>${f.winCount}</td>
+      <td>${f.lossCount}</td>
+    </tr>`).join('');
+
+  const bucketOrder = Object.keys(snap.confirmationsBuckets).sort((a, b) => Number(a) - Number(b));
+  const bucketRows = bucketOrder.map(k => {
+    const b = snap.confirmationsBuckets[k];
+    const resolved = b.wins + b.losses;
+    const wr = resolved > 0 ? (b.wins / resolved) * 100 : null;
+    return `
+    <tr>
+      <td>${k}</td>
+      <td>${b.wins}</td>
+      <td>${b.losses}</td>
+      <td>${resolved}</td>
+      <td>${fmtPct(wr)}</td>
+    </tr>`;
+  }).join('');
+
+  const famKeys = Object.keys(snap.familyBreakdown).sort();
+  const famRows = famKeys.map(fam => {
+    const f = snap.familyBreakdown[fam];
+    return `
+    <tr>
+      <td>${fam}</td>
+      <td>${f.resolved}</td>
+      <td>${f.wins}</td>
+      <td>${f.losses}</td>
+      <td>${fmtPct(f.winRatePct)}</td>
+      <td>${f.lowSample ? `⚠ below ${MIN_SYMBOL_SAMPLE}-trade sample` : '—'}</td>
+    </tr>`;
+  }).join('');
+
+  wrap.innerHTML = `
+    <div class="empty-note" style="text-align:left; padding:0 0 14px;">
+      Descriptive only — ${snap.resolvedCount} resolved of ${snap.totalCount} total signal(s) for ${snap.symbol}.
+      <code>time_since_spike_at_entry</code> and <code>family_score_at_entry</code> are excluded
+      (both currently mirror <code>primaryScore</code> / TrendQuality in SendSignal(), not independent fields).
+    </div>
+
+    <div class="subhead">Win / Loss Averages — Trustworthy Fields</div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Field</th><th>Avg (Win)</th><th>Avg (Loss)</th><th>N (Win)</th><th>N (Loss)</th></tr></thead>
+        <tbody>${fieldRows}</tbody>
+      </table>
+    </div>
+
+    <div class="subhead">ATR / Baseline ATR Ratio (descriptive only)</div>
+    <div class="summary-grid">
+      <div class="summary-card">
+        <div class="label">Avg Ratio — Win</div>
+        <div class="value">${fmtNum(snap.atrRatio.avgWin, 3)}</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">Avg Ratio — Loss</div>
+        <div class="value">${fmtNum(snap.atrRatio.avgLoss, 3)}</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">Sample (Win / Loss)</div>
+        <div class="value">${snap.atrRatio.winCount} / ${snap.atrRatio.lossCount}</div>
+      </div>
+    </div>
+
+    <div class="subhead">Confirmations at Entry — Buckets</div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Confirmations</th><th>Wins</th><th>Losses</th><th>Resolved</th><th>Win Rate</th></tr></thead>
+        <tbody>${bucketRows}</tbody>
+      </table>
+    </div>
+
+    <div class="subhead">Family Breakdown</div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Family</th><th>Resolved</th><th>Wins</th><th>Losses</th><th>Win Rate</th><th>Sample Note</th></tr></thead>
+        <tbody>${famRows || '<tr><td colspan="6">No family data available.</td></tr>'}</tbody>
+      </table>
+    </div>
+  `;
 }
 
 function computeNextExperiments(){
@@ -3002,6 +3215,8 @@ async function renderBehaviourExplorer(){
 
   const badge = document.getElementById('badge-behaviour');
   if(badge) badge.textContent = '(' + SYMBOL_LIST.length + ')';
+
+  renderEntrySnapshot(); // additive: Entry Snapshot is symbol-scoped, refresh on symbol change
 
   /** @type {BehaviourData} */
   let data;
