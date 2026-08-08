@@ -111,7 +111,15 @@ export default async function handler(req, res) {
         const diagnosticFields = {
           atr_at_entry: atr_value ?? null,
           baseline_atr_at_entry: baseline_atr_value ?? null,
-          compression_at_entry: components?.compression ?? null
+          compression_at_entry: components?.compression ?? null,
+          velocity_at_entry: components?.velocity ?? null,
+          time_since_spike_at_entry: components?.time_since_spike ?? null,
+          confirmations_at_entry: confirmations ?? null,
+          ticks_since_jump_at_entry: ticks_since_jump ?? null,
+          expected_gap_ticks_at_entry: expected_gap_ticks ?? null,
+          family_score_at_entry: family_score ?? null,
+          bbw_score_at_entry: bbw_score ?? null,
+          rsi_value_at_entry: rsi_value ?? null
         };
 
         let { error: historyInsertError } = await supabase
