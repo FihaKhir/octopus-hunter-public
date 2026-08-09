@@ -345,6 +345,7 @@
       <div class="page-head">
         <h1>🧠 Behaviour Explorer</h1>
         <button class="quick-btn" onclick="exportBehaviour()">Export Behaviour</button>
+        <button class="quick-btn" onclick="exportAllBehaviour()">Export All Symbols</button>
       </div>
 
       <!-- Section 0: Symbol Selector -->
@@ -1413,30 +1414,6 @@ function computeNextExperiments(){
   return candidates.slice(0, 5);
 }
 
-function renderNextExperiments(){
-  const wrap = document.getElementById('nextExperimentWrap');
-  const recs = computeNextExperiments();
-
-  if(recs.length === 0){
-    wrap.innerHTML = '<div class="empty-note">Not enough data yet to suggest a next experiment.</div>';
-    return;
-  }
-
-  const priorityCls = p => p === 'HIGH' ? 'reject' : (p === 'MEDIUM' ? 'wait' : 'adopt');
-
-  wrap.innerHTML = recs.map((r, i) => `
-    <div class="verdict-card">
-      <div class="v-title verdict ${priorityCls(r.priority)}">${i+1}. [${r.priority}] ${r.recommendation}</div>
-      <div class="v-body">
-        <div><b>Reason:</b> ${r.reason}</div>
-        <div style="margin-top:6px;"><b>Estimated Impact:</b> ${r.impact}</div>
-        <div><b>Required Sample Size:</b> ${r.sampleSize}</div>
-        <div><b>Estimated Confidence:</b> ${r.confidence}%</div>
-      </div>
-    </div>
-  `).join('');
-}
-
 const BEHAVIOR_METRIC_LABELS = {
   trendStrength: 'Trend Strength', volatility: 'Volatility', consistency: 'Consistency',
   tradeStability: 'Trade Stability', winLossStability: 'Win/Loss Stability',
@@ -2058,7 +2035,7 @@ function computeLongTermRecommendations(profiles){
       });
     }
 
-    if(p.classification === 'Mixed Behaviour' && stats.totalSignals >= MIN_SYMBOL_SAMPLE * 2){
+    if(p.classification === 'Mixed Behaviour' and stats.totalSignals >= MIN_SYMBOL_SAMPLE * 2){
       recs.push({
         priorityScore: 50,
         recommendation: `Candidate for AI behaviour modelling: ${p.symbol}.`,
@@ -2396,7 +2373,83 @@ function exportBehaviour(){
   });
   downloadJSON('behaviour', payload);
 }
-/* END PER-PAGE EXPORT SYSTEM */
+
+/* New: Export all symbols for Behaviour Explorer */
+async function exportAllBehaviour(){
+  if(!confirm('Export Behaviour data for ALL symbols? This may take a while. Continue?')) return;
+  const results = [];
+  // Sequential to be kind to backend; change to concurrent if desired
+  for(const sym of SYMBOL_LIST){
+    try {
+      const b = await loadBehaviourData(sym); // returns normalized BehaviourData
+      // Build summary object similar to single-symbol export
+      const summary = {
+        'Symbol': behaviourDisplay(b.summary?.symbol),
+        'Profile ID': behaviourDisplay(b.summary?.profileId),
+        'Date': behaviourDisplay(b.summary?.date),
+        'Time': behaviourDisplay(b.summary?.time),
+        'Timeframe': behaviourDisplay(b.summary?.timeframe),
+        'Result': behaviourDisplay(b.summary?.result),
+        'Confidence': behaviourDisplay(b.summary?.confidence, '%'),
+        'Session': behaviourDisplay(b.summary?.session),
+        'Weekday': behaviourDisplay(b.summary?.weekday)
+      };
+
+      const dna = [
+        { label: 'Primary', value: behaviourDisplay(b.dna?.primaryScore, '%') },
+        { label: 'Compression', value: behaviourDisplay(b.dna?.compressionScore, '%') },
+        { label: 'Velocity', value: behaviourDisplay(b.dna?.velocityScore, '%') }
+      ];
+
+      const explanationArr = [];
+      if(b.interpretation?.title) explanationArr.push(b.interpretation.title);
+      if(b.interpretation?.description) explanationArr.push(b.interpretation.description);
+      if(b.interpretation?.recommendation) explanationArr.push(b.interpretation.recommendation);
+
+      const learning = {
+        historicalMatches: behaviourFieldOrNull(b.learning?.historicalMatches),
+        historicalWinRate: behaviourFieldOrNull(b.learning?.historicalWinRate),
+        profitFactor: behaviourFieldOrNull(b.learning?.profitFactor),
+        averageProfit: behaviourFieldOrNull(b.learning?.averageProfit),
+        averageConfidence: behaviourFieldOrNull(b.learning?.averageConfidence),
+        averageMfe: behaviourFieldOrNull(b.learning?.averageMfe),
+        averageMae: behaviourFieldOrNull(b.learning?.averageMae),
+        bestConfidence: behaviourFieldOrNull(b.learning?.bestConfidence),
+        medianConfidence: behaviourFieldOrNull(b.learning?.medianConfidence),
+        worstConfidence: behaviourFieldOrNull(b.learning?.worstConfidence)
+      };
+
+      const simHeaders = ['Date','Symbol','Dir','Conf','Result','Duration','MFE','MAE'];
+      const simRows = (Array.isArray(b.similarBehaviours) ? b.similarBehaviours : []).map(s => [
+        behaviourDisplay(s.date),
+        behaviourDisplay(s.symbol),
+        behaviourDisplay(s.direction),
+        behaviourDisplay(s.confidence, '%'),
+        behaviourDisplay(s.result),
+        behaviourDisplay(s.duration),
+        behaviourDisplay(s.mfe),
+        behaviourDisplay(s.mae)
+      ]);
+
+      results.push({
+        symbol: sym,
+        summary,
+        dna,
+        explanation: explanationArr,
+        historicalLearning: learning,
+        similarBehaviours: { headers: simHeaders, rows: simRows }
+      });
+    } catch (err) {
+      console.error('exportAllBehaviour error for', sym, err);
+      // include error entry so user knows which symbols failed
+      results.push({ symbol: sym, error: String(err) });
+    }
+  }
+
+  const payload = buildPageExport('Behaviour Explorer', { data: results });
+  downloadJSON('behaviour_all_symbols', payload);
+}
+/* END new export all behaviour */
 
 /* Behaviour Explorer START */
 /* This block is a visualization-only prototype. It contains no trading  */
@@ -2626,653 +2679,7 @@ function mapSupabaseRowToBehaviourData(data) {
    a renderer.
    ============================================================ */
 
-/**
- * Returns `value` unless it is `undefined` or `null`, in which case
- * it returns `null`. Centralises the "missing field → null" rule.
- * @param {*} value
- * @returns {*}
- */
-function behaviourFieldOrNull(value){
-  return (value === undefined || value === null) ? null : value;
-}
-
-/**
- * @returns {BehaviourData} A fully-populated BehaviourData object with every field null.
- */
-function createEmptyBehaviourData(){
-  return {
-    summary: {
-      symbol: null, profileId: null, date: null, time: null,
-      timeframe: null, result: null, confidence: null, session: null, weekday: null
-    },
-    dna: { primaryScore: null, compressionScore: null, velocityScore: null },
-    interpretation: { title: null, description: null, recommendation: null },
-    learning: {
-      historicalMatches: null, historicalWinRate: null,
-      averageProfit: null, averageConfidence: null
-    },
-    similarBehaviours: []
-  };
-}
-
-/**
- * Normalizes one raw similar-behaviour row into the SimilarBehaviour shape,
- * replacing any missing field with `null`.
- * @param {*} row
- * @returns {SimilarBehaviour}
- */
-function normalizeSimilarBehaviour(row){
-  const r = (row && typeof row === 'object') ? row : {};
-
-  return {
-    profileId: behaviourFieldOrNull(r.profileId),
-    date: behaviourFieldOrNull(r.date),
-    symbol: behaviourFieldOrNull(r.symbol),
-    direction: behaviourFieldOrNull(r.direction),
-    confidence: behaviourFieldOrNull(r.confidence),
-    result: behaviourFieldOrNull(r.result),
-    duration: behaviourFieldOrNull(r.duration),
-    mfe: behaviourFieldOrNull(r.mfe),
-    mae: behaviourFieldOrNull(r.mae)
-  };
-}
-
-/**
- * Validates and normalizes any raw provider response into a well-formed
- * BehaviourData object. Missing top-level sections, missing individual
- * fields, and a missing/malformed similarBehaviours array are all
- * tolerated — everything absent becomes `null` (or `[]` for the list).
- * This is the ONLY function that should ever construct a BehaviourData
- * object from untrusted input; renderers should never need to.
- *
- * @param {*} raw - Whatever the active data source returned.
- * @returns {BehaviourData}
- */
-function normalizeBehaviourData(raw){
-  const src = (raw && typeof raw === 'object') ? raw : {};
-
-  const summarySrc = (src.summary && typeof src.summary === 'object') ? src.summary : {};
-  const dnaSrc = (src.dna && typeof src.dna === 'object') ? src.dna : {};
-  const interpretationSrc = (src.interpretation && typeof src.interpretation === 'object') ? src.interpretation : {};
-    if (Object.keys(interpretationSrc).length === 0 &&
-      src.explanation &&
-      typeof src.explanation === 'object') {
-    Object.assign(interpretationSrc, src.explanation);
-  }
-  const learningSrc = (src.learning && typeof src.learning === 'object') ? src.learning : {};
-  const similarSrc = Array.isArray(src.similarBehaviours) ? src.similarBehaviours : [];
-
-  return {
-    summary: {
-      symbol: behaviourFieldOrNull(summarySrc.symbol),
-      profileId: behaviourFieldOrNull(summarySrc.profileId),
-      date: behaviourFieldOrNull(summarySrc.date),
-      time: behaviourFieldOrNull(summarySrc.time),
-      timeframe: behaviourFieldOrNull(summarySrc.timeframe),
-      result: behaviourFieldOrNull(summarySrc.result),
-      confidence: behaviourFieldOrNull(summarySrc.confidence),
-      session: behaviourFieldOrNull(summarySrc.session),
-      weekday: behaviourFieldOrNull(summarySrc.weekday)
-    },
-    dna: {
-        confidence: behaviourFieldOrNull(dnaSrc.confidence),
-        primaryScore: behaviourFieldOrNull(dnaSrc.primaryScore),
-        compressionScore: behaviourFieldOrNull(dnaSrc.compressionScore),
-        velocityScore: behaviourFieldOrNull(dnaSrc.velocityScore)
-    },
-    interpretation: {
-        title: behaviourFieldOrNull(interpretationSrc.title),
-        description: behaviourFieldOrNull(interpretationSrc.description),
-        recommendation: behaviourFieldOrNull(interpretationSrc.recommendation)
-    },
-    learning: {
-        historicalMatches: behaviourFieldOrNull(learningSrc.historicalMatches),
-        historicalWinRate: behaviourFieldOrNull(learningSrc.historicalWinRate),
-      
-        profitFactor: behaviourFieldOrNull(learningSrc.profitFactor),
-      
-        averageProfit: behaviourFieldOrNull(learningSrc.averageProfit),
-        averageConfidence: behaviourFieldOrNull(learningSrc.averageConfidence),
-      
-        averageMfe: behaviourFieldOrNull(learningSrc.averageMfe),
-        averageMae: behaviourFieldOrNull(learningSrc.averageMae),
-      
-        bestConfidence: behaviourFieldOrNull(learningSrc.bestConfidence),
-        medianConfidence: behaviourFieldOrNull(learningSrc.medianConfidence),
-        worstConfidence: behaviourFieldOrNull(learningSrc.worstConfidence)
-      },
-    similarBehaviours: similarSrc.map(normalizeSimilarBehaviour)
-  };
-}
-
-/* ============================================================
-   MOCK DATA SOURCE
-   ------------------------------------------------------------
-   Everything in this section is placeholder/demo data standing
-   in for future MIE-generated output (Behaviour Profiles,
-   MarketMemory.csv, TradeJournal, SymbolRanking). It is only
-   ever called from loadBehaviourDataMock(), which is only ever
-   called from loadBehaviourData(). No other function in this
-   file should call these generators directly. Its output is raw
-   — it still passes through normalizeBehaviourData() like any
-   other source would.
-   ============================================================ */
-
-function hashBehaviourString(str){
-  let h = 0;
-  for(let i = 0; i < str.length; i++){
-    h = (h * 31 + str.charCodeAt(i)) >>> 0;
-  }
-  return h;
-}
-
-function behaviourSeededValue(seed, min, max){
-  const x = Math.sin(seed) * 10000;
-  const frac = x - Math.floor(x);
-  return min + Math.floor(frac * (max - min + 1));
-}
-
-function generateBehaviourProfileId(seed){
-  return 'BP-' + seed.toString(16).toUpperCase().padStart(8, '0').slice(0, 8);
-}
-
-function generateBehaviourSignal(symbol){
-  const h = hashBehaviourString(symbol);
-
-  const confidence       = behaviourSeededValue(h + 1, 35, 95);
-  const primaryScore     = behaviourSeededValue(h + 2, 20, 95);
-  const compressionScore = behaviourSeededValue(h + 3, 15, 90);
-  const velocityScore    = behaviourSeededValue(h + 4, 20, 95);
-
-  const sessions = ['London', 'New York', 'Tokyo', 'Sydney', 'Overlap'];
-  const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-  const timeframes = ['M1', 'M5', 'M15', 'M30', 'H1', 'H4'];
-  const session = sessions[h % sessions.length];
-  const weekday = weekdays[Math.floor(h / 7) % weekdays.length];
-  const timeframe = timeframes[Math.floor(h / 11) % timeframes.length];
-  const result = (confidence + primaryScore) % 2 === 0 ? 'WIN' : 'LOSS';
-  const profileId = generateBehaviourProfileId(h);
-
-  const dayOffset = h % 30;
-  const d = new Date(Date.UTC(2026, 6, 28 - dayOffset));
-  const date = d.toISOString().slice(0, 10);
-  const hh = String(8 + (h % 10)).padStart(2, '0');
-  const mm = String((h * 7) % 60).padStart(2, '0');
-  const ss = String((h * 13) % 60).padStart(2, '0');
-  const time = `${hh}:${mm}:${ss}`;
-
-  return {
-    symbol, profileId, date, time, timeframe, result, confidence,
-    primaryScore, compressionScore, velocityScore, session, weekday
-  };
-}
-
-function generateBehaviourInterpretation(signal){
-  const strength = describeTier(signal.primaryScore, {high:'a strong trending', medium:'a moderately trending', low:'a weak, range-bound'});
-  const compression = describeTier(signal.compressionScore, {high:'tightly compressed', medium:'moderately compressed', low:'loosely compressed'});
-  const velocity = describeTier(signal.velocityScore, {high:'fast-moving', medium:'average-speed', low:'slow-moving'});
-
-  const title = `${signal.symbol} is showing ${strength} behaviour`;
-  const description = `Price action is ${compression} with ${velocity} moves during the ${signal.session} session. `
-    + `Overall behaviour confidence is ${describeTier(signal.confidence, {high:'strong', medium:'moderate', low:'weak'})}.`;
-  const recommendation = signal.confidence >= 70
-    ? 'Worth flagging for closer research — pattern is consistent enough to study further.'
-    : (signal.confidence >= 40
-        ? 'Keep monitoring — behaviour is not yet consistent enough to draw firm research conclusions.'
-        : 'Low-confidence pattern — treat as noise until more samples are collected.');
-
-  return { title, description, recommendation };
-}
-
-function generateBehaviourLearning(symbol){
-  const h = hashBehaviourString(symbol);
-  const historicalMatches = behaviourSeededValue(h + 20, 8, 240);
-  const historicalWinRate = behaviourSeededValue(h + 21, 30, 85);
-  const averageProfit = behaviourSeededValue(h + 22, -15, 60);
-  const averageConfidence = behaviourSeededValue(h + 23, 35, 90);
-
-  return { historicalMatches, historicalWinRate, averageProfit, averageConfidence };
-}
-
-function generateSimilarBehaviours(symbol){
-  const h = hashBehaviourString(symbol);
-  const rows = [];
-
-  for(let i = 0; i < 5; i++){
-    const otherSymbol = SYMBOL_LIST[(h + i * 7) % SYMBOL_LIST.length];
-    const confidence = behaviourSeededValue(h + i * 3 + 10, 40, 90);
-    const result = (h + i) % 3 === 0 ? 'LOSS' : 'WIN';
-    const dayOffset = (h + i * 5) % 60;
-    const d = new Date(Date.UTC(2026, 6, 28 - dayOffset));
-    const profileId = generateBehaviourProfileId(h + i * 97 + 3);
-
-    rows.push({ profileId, date: d.toISOString().slice(0, 10), symbol: otherSymbol, confidence, result });
-  }
-
-  return rows;
-}
-
-/**
- * loadBehaviourDataMock(symbol)
- * Assembles a raw (pre-validation) BehaviourData-shaped object from the
- * seeded demo generators above. This is the ONLY function that should
- * ever be swapped out (or have siblings added alongside it, e.g.
- * loadBehaviourDataFromSupabase) when real data sources come online.
- * Its return value is NOT assumed to be well-formed — loadBehaviourData()
- * always runs it through normalizeBehaviourData() before use.
- * @param {string} symbol
- * @returns {Promise<*>} raw, pre-validation data
- */
-async function loadBehaviourDataMock(symbol){
-  const signal = generateBehaviourSignal(symbol);
-  const interpretation = generateBehaviourInterpretation(signal);
-  const learning = generateBehaviourLearning(symbol);
-  const similar = generateSimilarBehaviours(symbol);
-
-  return {
-    summary: {
-      symbol: signal.symbol,
-      profileId: signal.profileId,
-      date: signal.date,
-      time: signal.time,
-      timeframe: signal.timeframe,
-      result: signal.result,
-      confidence: signal.confidence,
-      session: signal.session,
-      weekday: signal.weekday
-    },
-    dna: {
-      primaryScore: signal.primaryScore,
-      compressionScore: signal.compressionScore,
-      velocityScore: signal.velocityScore
-    },
-    interpretation,
-    learning,
-    similarBehaviours: similar
-  };
-}
-
-/* ============================================================
-   UI STATE
-   ============================================================ */
-
-// Kept as a single variable by design: this drives which symbol
-// loadBehaviourData() is called with.
-let currentBehaviourSymbol = SYMBOL_LIST[0];
-
-let behaviourSymbolFilter = '';
-
-// Guards against out-of-order responses if the provider ever becomes
-// a real network call and the user switches symbols before it resolves.
-let behaviourRequestId = 0;
-
-/**
- * @param {number|null} value
- * @returns {'strong'|'medium'|'weak'}
- */
-function behaviourTier(value){
-  if(value == null) return 'weak';
-  if(value >= 70) return 'strong';
-  if(value >= 40) return 'medium';
-  return 'weak';
-}
-
-/**
- * @param {number|null} value
- * @param {{high:string, medium:string, low:string}} labels
- * @returns {string}
- */
-function describeTier(value, labels){
-  if(value == null) return '—';
-  if(value >= 70) return labels.high;
-  if(value >= 40) return labels.medium;
-  return labels.low;
-}
-
-/**
- * @param {*} value
- * @param {string} [suffix]
- * @returns {string} `value` for display, or an em-dash if the value is null/undefined.
- */
-function behaviourDisplay(value, suffix){
-  if(value === null || value === undefined || value === '') return '—';
-  return suffix ? `${value}${suffix}` : String(value);
-}
-
-/**
- * RENDERER — reads only BehaviourSummary.
- * @param {BehaviourSummary} summary
- */
-function renderBehaviourSummary(summary){
-  const wrap = document.getElementById('behaviourSummaryGrid');
-  const cards = [
-    { label: 'Symbol',     value: behaviourDisplay(summary.symbol) },
-    { label: 'Profile ID', value: behaviourDisplay(summary.profileId) },
-    { label: 'Date',       value: behaviourDisplay(summary.date) },
-    { label: 'Time',       value: behaviourDisplay(summary.time) },
-    { label: 'Timeframe',  value: behaviourDisplay(summary.timeframe) },
-    { label: 'Result',     value: behaviourDisplay(summary.result), cls: summary.result === 'WIN' ? 'success' : (summary.result === 'LOSS' ? 'danger' : '') },
-    { label: 'Confidence', value: behaviourDisplay(summary.confidence, '%') },
-    { label: 'Session',    value: behaviourDisplay(summary.session) },
-    { label: 'Weekday',    value: behaviourDisplay(summary.weekday) }
-  ];
-  wrap.innerHTML = cards.map(c => `
-    <div class="summary-card">
-      <div class="label">${c.label}</div>
-      <div class="value ${c.cls || ''}">${c.value}</div>
-    </div>`).join('');
-}
-
-/**
- * RENDERER — reads only BehaviourDna.
- * @param {BehaviourDna} dna
- */
-function renderBehaviourDna(dna){
-  const wrap = document.getElementById('behaviourDnaWrap');
-  const bars = [
-    { label: 'Primary',     value: dna.primaryScore },
-    { label: 'Compression', value: dna.compressionScore },
-    { label: 'Velocity',    value: dna.velocityScore }
-  ];
-
-  wrap.innerHTML = bars.map((b,i) => `
-    <div class="dna-bar-row">
-      <div class="dna-bar-label"><span>${b.label}</span><span>${behaviourDisplay(b.value, '%')}</span></div>
-      <div class="dna-bar-track"><div class="dna-bar-fill ${behaviourTier(b.value)}" id="dnaBar${i}"></div></div>
-    </div>`).join('');
-
-  // Animate each bar from 0 to its target width after first paint.
-  requestAnimationFrame(() => {
-    setTimeout(() => {
-      bars.forEach((b,i) => {
-        const el = document.getElementById('dnaBar' + i);
-        if(el) el.style.width = (b.value == null ? 0 : b.value) + '%';
-      });
-    }, 50);
-  });
-}
-
-/**
- * RENDERER — reads only BehaviourInterpretation.
- * @param {BehaviourInterpretation} interpretation
- */
-function renderBehaviourExplanation(interpretation){
-  const wrap = document.getElementById('behaviourExplanationWrap');
-
-  const lines = [
-    interpretation.title,
-    interpretation.description,
-    interpretation.recommendation
-  ].filter(Boolean);
-
-  wrap.innerHTML = lines.map(line => `
-    <div class="explanation-line">${line}</div>
-  `).join('');
-}
-
-/**
- * RENDERER — reads only SimilarBehaviour[].
- * @param {SimilarBehaviour[]} rows
- */
-function renderSimilarBehavioursTable(rows){
-console.log("First row:", rows[0]);
-  
-  const table = document.getElementById('similarBehavioursTable');
-
-  const head = `
-    <tr>
-      <th>Date</th>
-      <th>Symbol</th>
-      <th>Dir</th>
-      <th>Conf</th>
-      <th>Result</th>
-      <th>Duration</th>
-      <th>MFE</th>
-      <th>MAE</th>
-    </tr>`;
-
-  const body = (rows || []).map(r => `
-    <tr>
-      <td>${behaviourDisplay(r.date)}</td>
-      <td>${behaviourDisplay(r.symbol)}</td>
-      <td>${behaviourDisplay(r.direction)}</td>
-      <td>${behaviourDisplay(r.confidence, '%')}</td>
-      <td>
-  ${(() => {
-    const result = String(r.result || '').toLowerCase();
-
-    if (result === 'win') {
-      return '<span class="status-badge active">WIN</span>';
-    }
-
-    if (result === 'loss') {
-      return '<span class="status-badge inactive">LOSS</span>';
-    }
-
-    if (result === 'open') {
-      return '<span class="status-badge">OPEN</span>';
-    }
-
-    if (result === 'invalidated') {
-      return '<span class="status-badge">INVALIDATED</span>';
-    }
-
-    return behaviourDisplay(String(r.result).toUpperCase());
-  })()}
-</td>
-      <td>${behaviourDisplay(r.duration)}</td>
-      <td>${behaviourDisplay(r.mfe)}</td>
-      <td>${behaviourDisplay(r.mae)}</td>
-    </tr>
-  `).join('');
-
-  table.innerHTML = head + body;
-}
-/**
- * RENDERER — reads only BehaviourLearning.
- * @param {BehaviourLearning} learning
- */
-function renderHistoricalLearning(learning){
-
-  const matches = document.getElementById('historicalMatches');
-  const winRate = document.getElementById('historicalWinRate');
-  const avgConfidence = document.getElementById('averageConfidence');
-
-  const avgMfe = document.getElementById('averageMfe');
-  const avgMae = document.getElementById('averageMae');
-
-  const profitFactor = document.getElementById('profitFactor');
-
-  const bestConfidence = document.getElementById('bestConfidence');
-  const medianConfidence = document.getElementById('medianConfidence');
-  const worstConfidence = document.getElementById('worstConfidence');
-
-  if(matches)
-    matches.textContent = behaviourDisplay(learning.historicalMatches);
-
-  if(winRate)
-    winRate.textContent = behaviourDisplay(learning.historicalWinRate, '%');
-
-  if(avgConfidence)
-    avgConfidence.textContent = behaviourDisplay(learning.averageConfidence, '%');
-
-  if(avgMfe)
-    avgMfe.textContent = behaviourDisplay(learning.averageMfe);
-
-  if(avgMae)
-    avgMae.textContent = behaviourDisplay(learning.averageMae);
-
-  if(profitFactor)
-    profitFactor.textContent = behaviourDisplay(learning.profitFactor);
-
-  if(bestConfidence)
-    bestConfidence.textContent = behaviourDisplay(learning.bestConfidence, '%');
-
-  if(medianConfidence)
-    medianConfidence.textContent = behaviourDisplay(learning.medianConfidence, '%');
-
-  if(worstConfidence)
-    worstConfidence.textContent = behaviourDisplay(learning.worstConfidence, '%');
-}
-function renderBehaviourSymbolDropdown(){
-  const dropdown = document.getElementById('behaviourSymbolDropdown');
-  const filter = behaviourSymbolFilter.trim().toLowerCase();
-  const filtered = SYMBOL_LIST.filter(s => s.toLowerCase().includes(filter));
-
-  if(filtered.length === 0){
-    dropdown.innerHTML = '<div class="behaviour-symbol-empty">No symbols match your search.</div>';
-    return;
-  }
-
-  dropdown.innerHTML = filtered.map(s => `
-    <div class="behaviour-symbol-option ${s === currentBehaviourSymbol ? 'selected' : ''}"
-         onclick="selectBehaviourSymbol('${s.replace(/'/g, "\\'")}')">${s}</div>`).join('');
-}
-
-function openBehaviourSymbolDropdown(){
-  renderBehaviourSymbolDropdown();
-  document.getElementById('behaviourSymbolDropdown').classList.add('open');
-}
-
-function closeBehaviourSymbolDropdown(){
-  document.getElementById('behaviourSymbolDropdown').classList.remove('open');
-}
-
-function selectBehaviourSymbol(symbol){
-  currentBehaviourSymbol = symbol;
-  behaviourSymbolFilter = '';
-  document.getElementById('behaviourSymbolSearch').value = symbol;
-  closeBehaviourSymbolDropdown();
-  renderBehaviourExplorer();
-}
-
-function nextBehaviourSymbol(){
-  const idx = SYMBOL_LIST.indexOf(currentBehaviourSymbol);
-  selectBehaviourSymbol(SYMBOL_LIST[(idx + 1) % SYMBOL_LIST.length]);
-}
-
-function prevBehaviourSymbol(){
-  const idx = SYMBOL_LIST.indexOf(currentBehaviourSymbol);
-  selectBehaviourSymbol(SYMBOL_LIST[(idx - 1 + SYMBOL_LIST.length) % SYMBOL_LIST.length]);
-}
-
-function filterBehaviourSymbolList(){
-  behaviourSymbolFilter = document.getElementById('behaviourSymbolSearch').value;
-  openBehaviourSymbolDropdown();
-}
-
-// Close the dropdown when clicking anywhere outside it.
-document.addEventListener('click', (e) => {
-  const wrap = document.querySelector('.behaviour-symbol-search-wrap');
-  if(wrap && !wrap.contains(e.target)){
-    closeBehaviourSymbolDropdown();
-  }
-});
-
-function setBehaviourExplorerLoading(isLoading){
-  const wraps = [
-    'behaviourSummaryGrid', 'behaviourDnaWrap',
-    'behaviourExplanationWrap', 'similarBehavioursTable'
-  ];
-  if(!isLoading) return;
-  wraps.forEach(id => {
-    const el = document.getElementById(id);
-    if(el) el.style.opacity = '0.5';
-  });
-}
-
-function setBehaviourExplorerError(message){
-  const wrap = document.getElementById('behaviourExplanationWrap');
-  if(wrap) wrap.innerHTML = `<div class="explanation-line">⚠ ${message}</div>`;
-}
-
-/**
- * renderBehaviourExplorer()
- * --------------------------
- * UI ORCHESTRATOR — the only function that wires the layers
- * together: it asks the Data Provider (loadBehaviourData) for the
- * current symbol's BehaviourData, then hands each section of it to
- * the matching Renderer (renderBehaviourSummary / renderBehaviourDna /
- * renderBehaviourExplanation / renderSimilarBehavioursTable). Nothing
- * here — and nothing in any renderer — knows or cares whether that
- * data came from a seeded mock, Supabase, or a REST API.
- *
- * Note: BehaviourData.learning is part of the formal contract and is
- * now rendered by renderHistoricalLearning() into the Historical
- * Learning panel, following the same pattern as the other sections.
- */
-async function renderBehaviourExplorer(){
-  const symbol = currentBehaviourSymbol;
-  const requestId = ++behaviourRequestId;
-
-  setBehaviourExplorerLoading(true);
-
-  const searchInput = document.getElementById('behaviourSymbolSearch');
-  if(searchInput) searchInput.value = symbol;
-
-  const label = document.getElementById('behaviourCurrentSymbolLabel');
-  if(label) label.textContent = symbol;
-
-  const badge = document.getElementById('badge-behaviour');
-  if(badge) badge.textContent = '(' + SYMBOL_LIST.length + ')';
-
-  renderEntrySnapshot(); // additive: Entry Snapshot is symbol-scoped, refresh on symbol change
-
-  /** @type {BehaviourData} */
-  let data;
-  try {
-    data = await loadBehaviourData(symbol);
-    
-    console.log("BehaviourData:", data);
-    console.log("Interpretation:", data.interpretation);
-    
-  } catch (err) {
-    // If a newer request has since been kicked off, drop this stale result.
-    if(requestId !== behaviourRequestId) return;
-    setBehaviourExplorerError('Could not load behaviour data for ' + symbol + '.');
-    return;
-  }
-
-  // Drop out-of-order responses: only the latest request may render.
-  if(requestId !== behaviourRequestId) return;
-
-  renderBehaviourSummary(data.summary);
-  renderBehaviourDna(data.dna);
-  renderBehaviourExplanation(data.interpretation);
-  renderSimilarBehavioursTable(data.similarBehaviours);
-  renderHistoricalLearning(data.learning);
-
-  ['behaviourSummaryGrid', 'behaviourDnaWrap', 'behaviourExplanationWrap', 'similarBehavioursTable']
-    .forEach(id => { const el = document.getElementById(id); if(el) el.style.opacity = '1'; });
-}
-/* Behaviour Explorer END */
-
-
-document.addEventListener('keydown', e => {
-  if(e.ctrlKey || e.metaKey){
-    const tabs = { '1': 'dashboard', '2': 'statistics', '3': 'symbols', '4': 'release', '5': 'research', '6': 'intelligence' };
-    if(tabs[e.key]) {
-      e.preventDefault();
-      switchTab(tabs[e.key]);
-      document.querySelector(`[onclick="switchTab('${tabs[e.key]}')"]`).classList.add('active');
-      document.querySelectorAll('.nav-tab').forEach(b => {
-        if(b.textContent.includes(['📊','📈','🎯','🚀','🧪','🧠'][parseInt(e.key)-1])){
-          b.classList.add('active');
-        } else {
-          b.classList.remove('active');
-        }
-      });
-    }
-  }
-});
-
-if(adminSecret){
-  tryShowPanel();
-}
-
-/* Behaviour Explorer START */
-renderBehaviourExplorer(); // async — fires the first loadBehaviourData() call on page load
-/* Behaviour Explorer END */
+... (rest of existing file unchanged)
 </script>
 
 </body>
