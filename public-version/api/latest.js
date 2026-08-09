@@ -61,17 +61,15 @@ export default async function handler(req, res) {
   let showTpSl = false; // default to hidden
   try {
     const { data: configRow, error: configError } = await supabase
-      .from('display_config')
-      .select('hidden_symbols, maintenance_mode, show_tp_sl')
-      .eq('id', 1)
-      .maybeSingle();
+  .from('display_config')
+  .select('hidden_symbols, show_tp_sl')
+  .eq('id', 1)
+  .maybeSingle();
 
     if (configError) {
       console.error('display_config read error (treating as no config):', configError);
     } else {
-      if (configRow?.maintenance_mode) {
-        return res.status(200).json({ maintenance: true, signals: [] });
-      }
+      
       // normalize hidden_symbols safely to an array of trimmed strings
       if (Array.isArray(configRow?.hidden_symbols)) {
         hiddenSymbols = configRow.hidden_symbols.map(s => String(s).trim());
