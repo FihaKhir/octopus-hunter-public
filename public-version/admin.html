@@ -262,7 +262,7 @@ async function loadCodes(){
     return false;
   }
 }
-
+let ALL_SYMBOLS = [];
 async function loadSymbolVisibility(){
   const grid = document.getElementById('symbolGrid');
   try{
@@ -272,6 +272,7 @@ async function loadSymbolVisibility(){
       return;
     }
     const { all_symbols, hidden_symbols, show_tp_sl } = await res.json();
+    ALL_SYMBOLS = all_symbols || [];
 
     // set the showTpSl checkbox (default false)
     document.getElementById('showTpSlCheckbox').checked = !!show_tp_sl;
@@ -296,35 +297,82 @@ async function loadSymbolVisibility(){
 
 async function saveSymbolVisibility(){
   const note = document.getElementById('visibilitySaveNote');
+
   note.className = 'save-note';
   note.textContent = 'Saving…';
 
-  const hidden_symbols = [...document.querySelectorAll('#symbolGrid .symbol-item')]
-    .filter(el => !el.querySelector('input').checked)
-    .map(el => el.dataset.symbol);
+  let hidden_symbols = [];
 
-  const show_tp_sl = !!document.getElementById('showTpSlCheckbox').checked;
+  // Use the complete symbol list received from the server.
+  // Checked = visible.
+  // Unchecked = hidden.
+  if (Array.isArray(ALL_SYMBOLS) && ALL_SYMBOLS.length > 0) {
 
-  try{
+    hidden_symbols = ALL_SYMBOLS.filter(sym => {
+
+      const item = [...document.querySelectorAll('#symbolGrid .symbol-item')]
+        .find(el => el.dataset.symbol === sym);
+
+      const input = item ? item.querySelector('input') : null;
+
+      return !(input && input.checked);
+    });
+
+  } else {
+
+    // Defensive fallback.
+    hidden_symbols = [...document.querySelectorAll('#symbolGrid .symbol-item')]
+      .filter(el => {
+        const input = el.querySelector('input');
+        return !input || !input.checked;
+      })
+      .map(el => el.dataset.symbol);
+  }
+
+  // TP/SL setting from the checkbox.
+  const tpSlCheckbox = document.getElementById('showTpSlCheckbox');
+  const show_tp_sl = !!(tpSlCheckbox && tpSlCheckbox.checked);
+
+  try {
+
     const res = await fetch('/api/symbol-visibility', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ admin_secret: adminSecret, hidden_symbols, show_tp_sl })
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        admin_secret: adminSecret,
+        hidden_symbols,
+        show_tp_sl
+      })
     });
 
     const data = await res.json().catch(() => ({}));
 
-    if(!res.ok){
+    if (!res.ok) {
       note.textContent = data.error || 'Failed to save.';
       return;
     }
 
-    // Use the server's returned value (if present) to confirm what was saved.
-    const savedShow = (typeof data.show_tp_sl !== 'undefined') ? !!data.show_tp_sl : show_tp_sl;
+    const savedHidden =
+      Array.isArray(data.hidden_symbols)
+        ? data.hidden_symbols
+        : hidden_symbols;
+
+    const savedShow =
+      typeof data.show_tp_sl !== 'undefined'
+        ? !!data.show_tp_sl
+        : show_tp_sl;
 
     note.className = 'save-note success';
-    note.textContent = `Saved — ${hidden_symbols.length} symbol(s) hidden. TP/SL: ${savedShow ? 'ON' : 'OFF'}.`;
-  }catch(e){
+
+    note.textContent =
+      `Saved — ${savedHidden.length} symbol(s) hidden. TP/SL: ${savedShow ? 'ON' : 'OFF'}.`;
+
+  } catch (e) {
+
+    console.error('saveSymbolVisibility error:', e);
+
     note.textContent = 'Network error.';
   }
 }
