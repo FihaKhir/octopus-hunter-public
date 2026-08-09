@@ -87,7 +87,10 @@ export default async function handler(req, res) {
   } catch (err) {
     console.error('display_config read failed (show_tp_sl will be treated as false):', err);
   }
-
+    console.log('DISPLAY CONFIG:', {
+      hiddenSymbols,
+      showTpSl
+    });
   const visibleRows = hiddenSymbols.length
     ? data.filter(row => !hiddenSymbols.includes(row.symbol))
     : data;
