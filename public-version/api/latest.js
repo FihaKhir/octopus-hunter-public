@@ -64,14 +64,16 @@ export default async function handler(req, res) {
   // everything) rather than closed, so a display_config hiccup can never
   // take down the whole dashboard the way failing closed would.
   let hiddenSymbols = [];
+  let showTpSl = false; // default to hidden
   try {
     const { data: configRow, error: configError } = await supabase
       .from('display_config')
-      .select('hidden_symbols, maintenance_mode')
+      .select('hidden_symbols, maintenance_mode, show_tp_sl')
       .eq('id', 1)
       .maybeSingle();
     if (configError) {
-      console.error('display_config read error (failing open, showing all symbols):', configError);
+      // IMPORTANT: per requirements, if display_config lookup fails, TP/SL must remain hidden.
+      console.error('display_config read error (show_tp_sl will be treated as false):', configError);
     } else {
       if (configRow?.maintenance_mode) {
         return res.status(200).json({ maintenance: true, signals: [] });
@@ -79,9 +81,11 @@ export default async function handler(req, res) {
       if (configRow?.hidden_symbols) {
         hiddenSymbols = configRow.hidden_symbols;
       }
+      // If show_tp_sl is present and truthy, show; otherwise false
+      showTpSl = !!configRow?.show_tp_sl;
     }
   } catch (err) {
-    console.error('display_config read failed (failing open, showing all symbols):', err);
+    console.error('display_config read failed (show_tp_sl will be treated as false):', err);
   }
 
   const visibleRows = hiddenSymbols.length
@@ -92,19 +96,27 @@ export default async function handler(req, res) {
   // no confirmation count, no compression/velocity/family breakdown. This is
   // real server-side hiding, not just a UI restriction someone could bypass
   // by reading the network request directly.
-  const publicData = visibleRows.map(row => ({
-    symbol: row.symbol,
-    direction: row.direction,
-    confidence: row.confidence,
-    status: row.status,
-    hit_time: row.hit_time,
-    sent_at: row.sent_at,
-    created_at: row.created_at || row.sent_at,
-    bar_time: row.bar_time,
-    timeframe: row.timeframe,
-    family: row.family,
-    sl_proximity: row.sl_proximity
-  }));
+  const publicData = visibleRows.map(row => {
+    const base = {
+      symbol: row.symbol,
+      direction: row.direction,
+      confidence: row.confidence,
+      status: row.status,
+      hit_time: row.hit_time,
+      sent_at: row.sent_at,
+      created_at: row.created_at || row.sent_at,
+      bar_time: row.bar_time,
+      timeframe: row.timeframe,
+      family: row.family,
+      sl_proximity: row.sl_proximity
+    };
+    if (showTpSl) {
+      base.entry_price = row.entry_price;
+      base.sl_price = row.sl_price;
+      base.tp_price = row.tp_price;
+    }
+    return base;
+  });
 
   return res.status(200).json(publicData);
 }
