@@ -60,6 +60,18 @@
   button.danger{ background:var(--down); color:#1a0505; }
   button.danger:disabled{ background:var(--panel); color:var(--muted); border:1px solid var(--border); cursor:not-allowed; }
   .warning-text{ font-size:12px; color:var(--muted); line-height:1.6; margin-bottom:14px; }
+
+  /* Tabs */
+  .tabs { display:flex; gap:8px; margin-bottom:18px; }
+  .tab-btn {
+    background:var(--panel); border:1px solid var(--border); color:var(--text);
+    padding:8px 12px; border-radius:8px; cursor:pointer; font-family:'IBM Plex Mono',monospace; font-size:13px;
+  }
+  .tab-btn.active { background:var(--accent); color:#04120f; border-color:var(--accent); }
+  .tab-content { display:none; }
+  .tab-content.active { display:block; }
+  .switch-row { display:flex; align-items:center; gap:12px; justify-content:space-between; margin-bottom:12px; }
+  .switch-row label{ margin:0; }
 </style>
 </head>
 <body>
@@ -79,73 +91,106 @@
     <a class="nav-btn" href="/lab.html">🧪 Strategy Lab</a>
   </div>
 
-  <div class="panel">
-    <label>Duration</label>
-    <select id="durationSelect">
-      <option value="5">5 days</option>
-      <option value="15">15 days</option>
-      <option value="30">30 days</option>
-      <option value="lifetime">Lifetime</option>
-    </select>
-    <label>Label (optional, e.g. who it's for)</label>
-    <input type="text" id="labelInput" placeholder="e.g. Ahmed">
-    <button onclick="generateCode()">Generate Code</button>
-    <div class="result" id="genResult"></div>
-    <div class="error" id="genError"></div>
+  <div class="tabs" role="tablist" aria-label="admin tabs">
+    <button class="tab-btn active" data-tab="tab-code" onclick="switchTab('tab-code')">Code Generator</button>
+    <button class="tab-btn" data-tab="tab-symbols" onclick="switchTab('tab-symbols')">Symbol Visibility</button>
+    <button class="tab-btn" data-tab="tab-history" onclick="switchTab('tab-history')">Trade History</button>
   </div>
 
-  <div class="panel">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
-      <span style="font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--muted);">Symbols shown on public dashboard</span>
-      <button class="secondary" onclick="loadSymbolVisibility()">Refresh</button>
+  <!-- TAB 1: Code Generator -->
+  <div id="tab-code" class="tab-content active">
+    <div class="panel">
+      <label>Duration</label>
+      <select id="durationSelect">
+        <option value="5">5 days</option>
+        <option value="15">15 days</option>
+        <option value="30">30 days</option>
+        <option value="lifetime">Lifetime</option>
+      </select>
+      <label>Label (optional, e.g. who it's for)</label>
+      <input type="text" id="labelInput" placeholder="e.g. Ahmed">
+      <button onclick="generateCode()">Generate Code</button>
+      <div class="result" id="genResult"></div>
+      <div class="error" id="genError"></div>
     </div>
-    <div class="symbol-grid" id="symbolGrid"><span class="save-note">Loading…</span></div>
-    <div class="visibility-save-row">
-      <button onclick="saveSymbolVisibility()">Save</button>
-      <span class="save-note" id="visibilitySaveNote"></span>
+
+    <div class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <span style="font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--muted);">All codes</span>
+        <button class="secondary" onclick="loadCodes()">Refresh</button>
+      </div>
+      <table>
+        <thead>
+          <tr><th>Code</th><th>Label</th><th>Duration</th><th>Status</th><th>Expires</th></tr>
+        </thead>
+        <tbody id="codesTableBody"></tbody>
+      </table>
     </div>
   </div>
 
-  <div class="panel danger-panel">
-    <h3>⚠️ Reset Trade History</h3>
-    <div class="warning-text">
-      Permanently deletes rows from <code>trade_history</code> (the data behind History and Strategy Lab). This does <b>not</b> touch the live dashboard, access codes, or the EA's live signals table — only the historical record. This cannot be undone.
+  <!-- TAB 2: Symbol Visibility -->
+  <div id="tab-symbols" class="tab-content">
+    <div class="panel">
+      <div class="switch-row">
+        <div>
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--muted);">Symbols shown on public dashboard</span>
+        </div>
+        <div>
+          <button class="secondary" onclick="loadSymbolVisibility()">Refresh</button>
+        </div>
+      </div>
+
+      <div class="switch-row">
+        <label style="font-family:'IBM Plex Mono',monospace; font-size:13px;">Show TP / SL on Dashboard</label>
+        <label style="display:flex; align-items:center; gap:10px;">
+          <input type="checkbox" id="showTpSlCheckbox">
+          <span style="font-size:13px; color:var(--muted);">ON / OFF</span>
+        </label>
+      </div>
+
+      <div class="symbol-grid" id="symbolGrid"><span class="save-note">Loading…</span></div>
+      <div class="visibility-save-row">
+        <button onclick="saveSymbolVisibility()">Save</button>
+        <span class="save-note" id="visibilitySaveNote"></span>
+      </div>
     </div>
-    <label>Scope</label>
-    <select id="resetScope" onchange="onResetScopeChange()">
-      <option value="version">One strategy version only</option>
-      <option value="all">Everything</option>
-    </select>
-    <div id="resetVersionRow">
-      <label>Strategy version to delete</label>
-      <select id="resetVersionSelect"><option value="">Loading…</option></select>
-    </div>
-    <label style="display:flex; align-items:center; gap:8px; text-transform:none; font-size:13px; color:var(--text); margin-bottom:14px;">
-      <input type="checkbox" id="resetNearMisses" style="width:auto; margin:0;"> Also clear matching rows in the near-miss diagnostic log
-    </label>
-    <label>Type RESET to confirm</label>
-    <input type="text" id="resetConfirmInput" placeholder="RESET" oninput="onResetConfirmInput()">
-    <button class="danger" id="resetBtn" disabled onclick="performReset()">Delete</button>
-    <div class="save-note" id="resetResultNote"></div>
   </div>
 
-  <div class="panel">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
-      <span style="font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--muted);">All codes</span>
-      <button class="secondary" onclick="loadCodes()">Refresh</button>
+  <!-- TAB 3: Trade History -->
+  <div id="tab-history" class="tab-content">
+    <div class="panel danger-panel">
+      <h3>⚠️ Reset Trade History</h3>
+      <div class="warning-text">
+        Permanently deletes rows from <code>trade_history</code> (the data behind History and Strategy Lab). This does <b>not</b> touch the live dashboard, access codes, or the EA's live signals table — only the historical record. This cannot be undone.
+      </div>
+      <label>Scope</label>
+      <select id="resetScope" onchange="onResetScopeChange()">
+        <option value="version">One strategy version only</option>
+        <option value="all">Everything</option>
+      </select>
+      <div id="resetVersionRow">
+        <label>Strategy version to delete</label>
+        <select id="resetVersionSelect"><option value="">Loading…</option></select>
+      </div>
+      <label style="display:flex; align-items:center; gap:8px; text-transform:none; font-size:13px; color:var(--text); margin-bottom:14px;">
+        <input type="checkbox" id="resetNearMisses" style="width:auto; margin:0;"> Also clear matching rows in the near-miss diagnostic log
+      </label>
+      <label>Type RESET to confirm</label>
+      <input type="text" id="resetConfirmInput" placeholder="RESET" oninput="onResetConfirmInput()">
+      <button class="danger" id="resetBtn" disabled onclick="performReset()">Delete</button>
+      <div class="save-note" id="resetResultNote"></div>
     </div>
-    <table>
-      <thead>
-        <tr><th>Code</th><th>Label</th><th>Duration</th><th>Status</th><th>Expires</th></tr>
-      </thead>
-      <tbody id="codesTableBody"></tbody>
-    </table>
   </div>
 </div>
 
 <script>
 const ADMIN_KEY = 'octopusHunterAdminSecret';
 let adminSecret = localStorage.getItem(ADMIN_KEY);
+
+function switchTab(id){
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === id));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === id));
+}
 
 function unlockAdmin(){
   const val = document.getElementById('adminSecretInput').value.trim();
@@ -226,7 +271,10 @@ async function loadSymbolVisibility(){
       grid.innerHTML = '<span class="save-note" style="color:var(--down);">Failed to load symbols.</span>';
       return;
     }
-    const { all_symbols, hidden_symbols } = await res.json();
+    const { all_symbols, hidden_symbols, show_tp_sl } = await res.json();
+
+    // set the showTpSl checkbox (default false)
+    document.getElementById('showTpSlCheckbox').checked = !!show_tp_sl;
 
     if(!all_symbols.length){
       grid.innerHTML = '<span class="save-note">No symbols reported yet — the EA needs to send at least one signal first.</span>';
@@ -255,11 +303,13 @@ async function saveSymbolVisibility(){
     .filter(el => !el.querySelector('input').checked)
     .map(el => el.dataset.symbol);
 
+  const show_tp_sl = !!document.getElementById('showTpSlCheckbox').checked;
+
   try{
     const res = await fetch('/api/symbol-visibility', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ admin_secret: adminSecret, hidden_symbols })
+      body: JSON.stringify({ admin_secret: adminSecret, hidden_symbols, show_tp_sl })
     });
     if(!res.ok){
       const data = await res.json().catch(() => ({}));
