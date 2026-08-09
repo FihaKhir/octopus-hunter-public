@@ -63,7 +63,7 @@ export default async function handler(req, res) {
 
     const { data: configRow, error: configError } = await supabase
       .from('display_config')
-      .select('hidden_symbols')
+      .select('hidden_symbols, show_tp_sl')
       .eq('id', 1)
       .maybeSingle();
 
@@ -77,12 +77,13 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       all_symbols: combinedSymbols,
-      hidden_symbols: configRow?.hidden_symbols || []
+      hidden_symbols: configRow?.hidden_symbols || [],
+      show_tp_sl: configRow?.show_tp_sl ?? false
     });
   }
 
   if (req.method === 'POST') {
-    const { admin_secret, hidden_symbols } = req.body;
+    const { admin_secret, hidden_symbols, show_tp_sl } = req.body;
 
     if (!admin_secret || admin_secret !== process.env.ADMIN_SECRET) {
       return res.status(401).json({ error: 'unauthorized' });
@@ -91,16 +92,19 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'hidden_symbols must be an array' });
     }
 
+    // upsert both hidden_symbols and show_tp_sl (default to false if not provided)
+    const upsertObj = { id: 1, hidden_symbols, show_tp_sl: !!show_tp_sl };
+
     const { error } = await supabase
       .from('display_config')
-      .upsert({ id: 1, hidden_symbols });
+      .upsert(upsertObj);
 
     if (error) {
       console.error('Supabase error:', error);
       return res.status(500).json({ error: error.message });
     }
 
-    return res.status(200).json({ ok: true, hidden_symbols });
+    return res.status(200).json({ ok: true, hidden_symbols, show_tp_sl: !!show_tp_sl });
   }
 
   return res.status(405).json({ error: 'method_not_allowed' });
