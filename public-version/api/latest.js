@@ -56,13 +56,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: error.message });
   }
 
-  // Symbol visibility: which symbols the owner has chosen to show on the
-  // public dashboard, set via admin.html -> /api/symbol-visibility. This is
-  // independent of which symbols the EA actually scans/reports on — a
-  // hidden symbol still gets tracked and logged normally, it just isn't
-  // returned here. A failure reading this config fails OPEN (shows
-  // everything) rather than closed, so a display_config hiccup can never
-  // take down the whole dashboard the way failing closed would.
+  // Read display_config
   let hiddenSymbols = [];
   let showTpSl = false; // default to hidden
   try {
@@ -71,35 +65,56 @@ export default async function handler(req, res) {
       .select('hidden_symbols, maintenance_mode, show_tp_sl')
       .eq('id', 1)
       .maybeSingle();
+
     if (configError) {
-      // IMPORTANT: per requirements, if display_config lookup fails, TP/SL must remain hidden.
-      console.error('display_config read error (show_tp_sl will be treated as false):', configError);
+      console.error('display_config read error (treating as no config):', configError);
     } else {
       if (configRow?.maintenance_mode) {
         return res.status(200).json({ maintenance: true, signals: [] });
       }
-      if (configRow?.hidden_symbols) {
-        hiddenSymbols = configRow.hidden_symbols;
+      // normalize hidden_symbols safely to an array of trimmed strings
+      if (Array.isArray(configRow?.hidden_symbols)) {
+        hiddenSymbols = configRow.hidden_symbols.map(s => String(s).trim());
+      } else {
+        hiddenSymbols = [];
       }
-      // Robust boolean coercion: accept truthy DB representations as true.
       showTpSl = !!configRow?.show_tp_sl;
     }
   } catch (err) {
-    console.error('display_config read failed (show_tp_sl will be treated as false):', err);
+    console.error('display_config read failed (treating as no config):', err);
   }
-    console.log('DISPLAY CONFIG:', {
-      hiddenSymbols,
-      showTpSl
+
+  // Diagnostic logging requested (non-sensitive)
+  try {
+    console.log('[DISPLAY CONFIG]', {
+      hidden_symbols_count: (hiddenSymbols || []).length,
+      show_tp_sl: !!showTpSl
     });
-  const visibleRows = hiddenSymbols.length
-    ? data.filter(row => !hiddenSymbols.includes(row.symbol))
+  } catch (e) { /* ignore logging errors */ }
+
+  // Compute visibleRows with normalized matching
+  const beforeCount = Array.isArray(data) ? data.length : 0;
+
+  // Build a normalized Set for fast membership checks
+  const hiddenSet = new Set((hiddenSymbols || []).map(s => String(s).trim()));
+
+  const visibleRows = (hiddenSet.size > 0 && Array.isArray(data))
+    ? data.filter(row => {
+        const sym = row && row.symbol ? String(row.symbol).trim() : '';
+        return !hiddenSet.has(sym);
+      })
     : data;
 
-  // Public version: only expose what the UI actually shows — no entry/SL/TP,
-  // no confirmation count, no compression/velocity/family breakdown. This is
-  // real server-side hiding, not just a UI restriction someone could bypass
-  // by reading the network request directly.
-  const publicData = visibleRows.map(row => {
+  const afterCount = Array.isArray(visibleRows) ? visibleRows.length : 0;
+
+  // More diagnostic logs
+  try {
+    console.log('[VISIBLE ROWS]', { before: beforeCount, after: afterCount });
+    console.log('[TP SL]', { enabled: !!showTpSl });
+  } catch (e) { /* ignore */ }
+
+  // Public version: only expose what the UI actually shows.
+  const publicData = (visibleRows || []).map(row => {
     const base = {
       symbol: row.symbol,
       direction: row.direction,
@@ -114,7 +129,6 @@ export default async function handler(req, res) {
       sl_proximity: row.sl_proximity
     };
     if (showTpSl) {
-      // Include these fields only when show_tp_sl is truthy in DB
       base.entry_price = row.entry_price;
       base.sl_price = row.sl_price;
       base.tp_price = row.tp_price;
