@@ -81,9 +81,8 @@ export default async function handler(req, res) {
       if (configRow?.hidden_symbols) {
         hiddenSymbols = configRow.hidden_symbols;
       }
-      // Strictly treat show_tp_sl as true only when it's exactly true.
-      const showTpSlValue = configRow?.show_tp_sl;
-      showTpSl = (showTpSlValue === true);
+      // Robust boolean coercion: accept truthy DB representations as true.
+      showTpSl = !!configRow?.show_tp_sl;
     }
   } catch (err) {
     console.error('display_config read failed (show_tp_sl will be treated as false):', err);
@@ -112,7 +111,7 @@ export default async function handler(req, res) {
       sl_proximity: row.sl_proximity
     };
     if (showTpSl) {
-      // Include these fields only when show_tp_sl is explicitly true in DB
+      // Include these fields only when show_tp_sl is truthy in DB
       base.entry_price = row.entry_price;
       base.sl_price = row.sl_price;
       base.tp_price = row.tp_price;
