@@ -311,13 +311,19 @@ async function saveSymbolVisibility(){
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ admin_secret: adminSecret, hidden_symbols, show_tp_sl })
     });
+
+    const data = await res.json().catch(() => ({}));
+
     if(!res.ok){
-      const data = await res.json().catch(() => ({}));
       note.textContent = data.error || 'Failed to save.';
       return;
     }
+
+    // Use the server's returned value (if present) to confirm what was saved.
+    const savedShow = (typeof data.show_tp_sl !== 'undefined') ? !!data.show_tp_sl : show_tp_sl;
+
     note.className = 'save-note success';
-    note.textContent = `Saved — ${hidden_symbols.length} symbol(s) hidden from the public dashboard.`;
+    note.textContent = `Saved — ${hidden_symbols.length} symbol(s) hidden. TP/SL: ${savedShow ? 'ON' : 'OFF'}.`;
   }catch(e){
     note.textContent = 'Network error.';
   }
