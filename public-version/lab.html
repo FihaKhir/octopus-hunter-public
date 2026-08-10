@@ -2393,7 +2393,6 @@ function exportBehaviour(){
     explanation: scrapeExplanationLines('behaviourExplanationWrap'),
     historicalLearning: scrapeHistoricalLearning(),
     similarBehaviours: scrapeTable('similarBehavioursTable')
-    entrySnapshot: computeEntrySnapshot()
   });
   downloadJSON('behaviour', payload);
 }
