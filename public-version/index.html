@@ -593,11 +593,14 @@ function fmtTime(rawTs){
   }
 }
 
-// Signal-box time display: the ACTUAL posted/created time (HH:MM, 24h,
-// app timezone) instead of a live elapsed-time counter. Reuses the same
-// authoritative timestamp field and parsing/timezone logic as fmtTime()
-// above, so it survives refresh — it reads the persisted timestamp, not
-// any page-load/timer state.
+// Signal-box time display: the ACTUAL posted/created time (HH:MM, 24h),
+// always converted to a single fixed timezone (Africa/Algiers) instead of
+// a live elapsed-time counter and instead of the user-selectable app
+// timezone (getTimezone()/TZ_STORAGE_KEY) that the clock/other displays
+// use. This reads the persisted timestamp only, so it survives refresh —
+// it has no dependency on page-load/timer state.
+const SIGNAL_TIME_DISPLAY_TZ = 'Africa/Algiers';
+
 function fmtHHMM(rawTs){
   if (!rawTs) return '—';
   let date;
@@ -608,7 +611,17 @@ function fmtHHMM(rawTs){
       const num = Number(rawTs);
       date = new Date(num < 1e11 ? num * 1000 : num);
     } else {
-      const isoStr = rawTs.includes(' ') && !rawTs.includes('T') ? rawTs.replace(' ', 'T') : rawTs;
+      let isoStr = rawTs.includes(' ') && !rawTs.includes('T') ? rawTs.replace(' ', 'T') : rawTs;
+      // Persisted signal timestamps are UTC. If the string has no explicit
+      // zone/offset marker, treat it as UTC (append 'Z') rather than letting
+      // the JS Date parser fall back to the browser's local timezone for
+      // that particular string — that fallback is what caused different
+      // symbols/rows to appear to use different timezones, since only some
+      // persisted rows carry an explicit UTC marker. Every row now converts
+      // from the same UTC baseline before being displayed in Africa/Algiers.
+      if (!/[zZ]|[+-]\d{2}:?\d{2}$/.test(isoStr)) {
+        isoStr += 'Z';
+      }
       date = new Date(isoStr);
     }
   } else {
@@ -621,7 +634,7 @@ function fmtHHMM(rawTs){
       hour: '2-digit',
       minute: '2-digit',
       hour12: false,
-      timeZone: getTimezone()
+      timeZone: SIGNAL_TIME_DISPLAY_TZ
     }).format(date);
   } catch(e) {
     const h = String(date.getHours()).padStart(2, '0');
