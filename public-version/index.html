@@ -593,6 +593,43 @@ function fmtTime(rawTs){
   }
 }
 
+// Signal-box time display: the ACTUAL posted/created time (HH:MM, 24h,
+// app timezone) instead of a live elapsed-time counter. Reuses the same
+// authoritative timestamp field and parsing/timezone logic as fmtTime()
+// above, so it survives refresh — it reads the persisted timestamp, not
+// any page-load/timer state.
+function fmtHHMM(rawTs){
+  if (!rawTs) return '—';
+  let date;
+  if (typeof rawTs === 'number') {
+    date = new Date(rawTs < 1e11 ? rawTs * 1000 : rawTs);
+  } else if (typeof rawTs === 'string') {
+    if (!isNaN(rawTs) && !isNaN(parseFloat(rawTs))) {
+      const num = Number(rawTs);
+      date = new Date(num < 1e11 ? num * 1000 : num);
+    } else {
+      const isoStr = rawTs.includes(' ') && !rawTs.includes('T') ? rawTs.replace(' ', 'T') : rawTs;
+      date = new Date(isoStr);
+    }
+  } else {
+    date = new Date(rawTs);
+  }
+  if (isNaN(date.getTime())) return '—';
+
+  try {
+    return new Intl.DateTimeFormat('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZone: getTimezone()
+    }).format(date);
+  } catch(e) {
+    const h = String(date.getHours()).padStart(2, '0');
+    const m = String(date.getMinutes()).padStart(2, '0');
+    return h + ':' + m;
+  }
+}
+
 // --- i18n ------------------------------------------------------------
 const I18N = {
   en: {
@@ -977,7 +1014,7 @@ function renderGrid(data){
 
       <div class="foot-row">
         <span class="tf ltr">${s.timeframe || ''}${s.family ? ' · ' + s.family : ''}</span>
-        <span class="countdown ltr">${formatAgo(elapsedSecondsSince(s))}</span>
+        <span class="countdown ltr">${fmtHHMM(s.created_at || s.sent_at)}</span>
       </div>
     </div>`;
   }).join('');
@@ -998,7 +1035,7 @@ function openDetail(i){
   const isClosed = status !== 'active';
   const nearSL = !isClosed && (s.sl_proximity || 0) >= 70;
 
-  const countdownHtml = `<div class="countdown-big ltr ${nearSL ? 'urgent' : ''}">${nearSL ? '⚠ ' + t('nearSL') + ' (' + Math.round(s.sl_proximity) + '%) · ' : ''}${formatAgo(elapsedSecondsSince(s))}</div>`;
+  const countdownHtml = `<div class="countdown-big ltr ${nearSL ? 'urgent' : ''}">${nearSL ? '⚠ ' + t('nearSL') + ' (' + Math.round(s.sl_proximity) + '%) · ' : ''}${fmtHHMM(s.created_at || s.sent_at)}</div>`;
 
   const openedTimeStr = fmtTime(s.created_at || s.sent_at);
   const closedTimeStr = s.hit_time ? fmtTime(s.hit_time) : null;
