@@ -12,7 +12,7 @@
     --muted:#6b7280; --up:#35c77e; --down:#e5484d; --gold:#d4a72c; --accent:#2ea8a8;
   }
   *{box-sizing:border-box; margin:0; padding:0;}
-  body{ background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; padding-top:140px; }
+  body{ background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; padding-top:195px; }
   
   #lockScreen{ max-width:340px; margin:80px auto; text-align:center; }
   #lockScreen h1{ font-family:'IBM Plex Mono',monospace; font-size:20px; }
@@ -95,6 +95,9 @@
     font-weight:700; font-size:13px; padding:10px 16px; border-radius:6px; cursor:pointer;
   }
   button.secondary{ background:var(--panel); border:1px solid var(--border); color:var(--text); }
+  /* Global time-range control (reused from History page) */
+  .filters{ display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; }
+  .time-range-btn.active{ background:var(--accent); color:#04120f; border-color:var(--accent); }
   .table-scroll{ overflow-x:auto; }
   table{ width:100%; border-collapse:collapse; font-size:12px; }
   th, td{ text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); font-family:'IBM Plex Mono',monospace; white-space:nowrap; }
@@ -204,6 +207,22 @@
         <button class="quick-btn" onclick="toggleAllExpanded()">Collapse All</button>
       </div>
     </div>
+
+    <!-- Global time-range control START (reused from History page: same buttons,
+         styling, active-state, and hour semantics as history.html's setTimeRange) -->
+    <div class="status-strip" id="timeRangeStrip">
+      <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+        <span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em;">Time range</span>
+        <div class="filters" id="timeRangeButtons">
+          <button class="secondary time-range-btn active" data-hours="" onclick="setTimeRange(null, this)">All time</button>
+          <button class="secondary time-range-btn" data-hours="1" onclick="setTimeRange(1, this)">Last 1h</button>
+          <button class="secondary time-range-btn" data-hours="4" onclick="setTimeRange(4, this)">Last 4h</button>
+          <button class="secondary time-range-btn" data-hours="12" onclick="setTimeRange(12, this)">Last 12h</button>
+          <button class="secondary time-range-btn" data-hours="24" onclick="setTimeRange(24, this)">Last 24h</button>
+        </div>
+      </div>
+    </div>
+    <!-- Global time-range control END -->
 
     <div class="nav-bar">
       <button class="nav-tab active" onclick="switchTab('dashboard')">📊 Dashboard<span class="nav-badge"></span></button>
@@ -475,6 +494,59 @@ let selectedBaseline = null;
 let lastRefreshTime = null;
 let allSymbolProfiles = [];
 
+/* ============================================================
+   GLOBAL TIME RANGE (reused from History page's setTimeRange /
+   withinTimeRange / queryWindowFrom implementation)
+   ------------------------------------------------------------
+   allRowsRaw   — the complete, unfiltered dataset exactly as
+                  returned by /api/history. Never mutated or
+                  trimmed by the time-range control.
+   allRows      — the SHARED, currently time-filtered dataset.
+                  Every existing tab/calculation in this file
+                  already reads from `allRows`, so filtering it
+                  once here (instead of inside each tab) makes
+                  the time range apply globally with no changes
+                  needed to Statistics/Symbols/Release/Research/
+                  Intelligence/Entry Snapshot calculations.
+   timeRangeHours / queryWindowFrom — same semantics as History.
+   ============================================================ */
+let allRowsRaw = [];
+let timeRangeHours = null; // null = all time
+let queryWindowFrom = null; // unix seconds — set when a time-range button is active
+
+function withinTimeRange(row){
+  if(queryWindowFrom === null) return true;
+  if(!row.opened_at) return false;
+  return row.opened_at >= queryWindowFrom;
+}
+
+/* Derives the filtered `allRows` view from `allRowsRaw` and
+   recomputes/re-renders every downstream tab. Does not re-fetch
+   from the server and does not touch allRowsRaw. */
+function applyTimeRangeFilter(){
+  if(timeRangeHours){
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    queryWindowFrom = nowSeconds - (timeRangeHours * 3600);
+  } else {
+    queryWindowFrom = null;
+  }
+  allRows = allRowsRaw.filter(withinTimeRange);
+
+  computeAllVersionStats();
+  allSymbolProfiles = computeAllSymbolProfiles();
+  populateBaselineSelect();
+  updateBadges();
+  updateStatusStrip();
+  renderAll();
+}
+
+function setTimeRange(hours, btnEl){
+  timeRangeHours = hours;
+  document.querySelectorAll('.time-range-btn').forEach(b => b.classList.remove('active'));
+  btnEl.classList.add('active');
+  applyTimeRangeFilter();
+}
+
 const MIN_RESOLVED_SAMPLE = 30;
 const WIN_RATE_MEANINGFUL_DELTA = 3.0;
 const EXPECTANCY_MEANINGFUL_DELTA_PCT = 10.0;
@@ -510,14 +582,11 @@ async function loadData(){
     const res = await fetch('/api/history?admin_secret=' + encodeURIComponent(adminSecret));
     if(!res.ok) return false;
     const payload = await res.json();
-    allRows = payload.rows;
+    allRowsRaw = payload.rows; // complete dataset — untouched by the time-range filter
     lastRefreshTime = new Date();
-    computeAllVersionStats();
-    allSymbolProfiles = computeAllSymbolProfiles();
-    populateBaselineSelect();
-    updateBadges();
-    updateStatusStrip();
-    renderAll();
+    applyTimeRangeFilter(); // derives filtered `allRows` (all rows, since queryWindowFrom
+                             // reflects whatever range button is currently active) and
+                             // runs the same compute/populate/update/render calls as before
     return true;
   }catch(e){
     return false;
