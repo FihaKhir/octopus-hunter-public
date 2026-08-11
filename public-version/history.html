@@ -195,6 +195,16 @@ let queryWindowFrom = null; // unix seconds — set when a time-range button is 
 let queryWindowTo = null;   // unix seconds — set when a time-range button is active
 
 // --- Timezone Management ------------------------------------------------
+// The application uses ONE FIXED display timezone everywhere: Africa/Algiers.
+// This is never derived from the browser/OS, from localStorage, or from any
+// symbol/exchange-specific value. Persisted timestamps (opened_at,
+// closed_at, etc.) remain untouched absolute instants — only how they are
+// formatted for display is fixed here.
+const APP_TIMEZONE = 'Africa/Algiers';
+
+// TZ_STORAGE_KEY / TIMEZONE_OPTIONS / getDetectedTimezone() are kept defined
+// (unused) only so nothing else in the file that might reference them by
+// name breaks; none of them feed the display timezone anymore.
 const TZ_STORAGE_KEY = 'octopusHunterTimezone';
 const TIMEZONE_OPTIONS = [
   'UTC',
@@ -227,28 +237,25 @@ function getDetectedTimezone(){
 }
 
 function getTimezone(){
-  return localStorage.getItem(TZ_STORAGE_KEY) || getDetectedTimezone();
+  // Fixed application-wide display timezone. Not read from localStorage
+  // and not derived from the browser/OS.
+  return APP_TIMEZONE;
 }
 
 function setTimezone(tz){
-  localStorage.setItem(TZ_STORAGE_KEY, tz);
-  if(allRows.length) renderAll();
+  // The display timezone is fixed (Africa/Algiers) and cannot be changed by
+  // the user. This is now a no-op, kept only because the (disabled)
+  // #tzSelect element's onchange attribute still references it.
 }
 
 function initTimezoneSelect(){
   const tzSelect = document.getElementById('tzSelect');
   if(!tzSelect) return;
-  const currentTz = getTimezone();
-  const detected = getDetectedTimezone();
-
-  let list = [...TIMEZONE_OPTIONS];
-  if(!list.includes(detected)) list.push(detected);
-  if(!list.includes(currentTz)) list.push(currentTz);
-  list.sort();
-
-  tzSelect.innerHTML = list.map(tz =>
-    `<option value="${tz}" ${tz === currentTz ? 'selected' : ''}>${tz}</option>`
-  ).join('');
+  // Single fixed option — the selector is kept in the header so removing it
+  // doesn't risk shifting the surrounding layout, but it no longer offers
+  // other timezones and cannot change how timestamps are displayed.
+  tzSelect.innerHTML = `<option value="${APP_TIMEZONE}" selected>${APP_TIMEZONE}</option>`;
+  tzSelect.disabled = true;
 }
 
 // --- i18n ---------------------------------------------------------------
@@ -390,7 +397,7 @@ function fmtTime(unixSeconds){
       timeZone: getTimezone()
     }).format(date).replace(',', '');
   } catch(e) {
-    return date.toLocaleString();
+    return '—';
   }
 }
 
