@@ -500,6 +500,16 @@ function renderTrackedChips(){
 }
 
 // --- Timezone Management ------------------------------------------------
+// The application uses ONE FIXED display timezone everywhere: Africa/Algiers.
+// This is never derived from the browser/OS, from localStorage, or from any
+// symbol/exchange-specific value. Persisted timestamps (created_at, sent_at,
+// hit_time, etc.) remain untouched absolute instants — only how they are
+// formatted for display is fixed here.
+const APP_TIMEZONE = 'Africa/Algiers';
+
+// TZ_STORAGE_KEY / TIMEZONE_OPTIONS / getDetectedTimezone() are kept defined
+// (unused) only so nothing else in the file that might reference them by
+// name breaks; none of them feed the display timezone anymore.
 const TZ_STORAGE_KEY = 'octopusHunterTimezone';
 const TIMEZONE_OPTIONS = [
   'UTC',
@@ -532,31 +542,25 @@ function getDetectedTimezone(){
 }
 
 function getTimezone(){
-  return localStorage.getItem(TZ_STORAGE_KEY) || getDetectedTimezone();
+  // Fixed application-wide display timezone. Not read from localStorage
+  // and not derived from the browser/OS.
+  return APP_TIMEZONE;
 }
 
 function setTimezone(tz){
-  localStorage.setItem(TZ_STORAGE_KEY, tz);
-  updateClock();
-  if(typeof renderGrid === 'function' && typeof lastData !== 'undefined') {
-    renderGrid(lastData);
-  }
+  // The display timezone is fixed (Africa/Algiers) and cannot be changed by
+  // the user. This is now a no-op, kept only because the (disabled)
+  // #tzSelect element's onchange attribute still references it.
 }
 
 function initTimezoneSelect(){
   const tzSelect = document.getElementById('tzSelect');
   if(!tzSelect) return;
-  const currentTz = getTimezone();
-  const detected = getDetectedTimezone();
-
-  let list = [...TIMEZONE_OPTIONS];
-  if(!list.includes(detected)) list.push(detected);
-  if(!list.includes(currentTz)) list.push(currentTz);
-  list.sort();
-
-  tzSelect.innerHTML = list.map(tz =>
-    `<option value="${tz}" ${tz === currentTz ? 'selected' : ''}>${tz}</option>`
-  ).join('');
+  // Single fixed option — the selector is kept in the header so removing it
+  // doesn't risk shifting the surrounding layout, but it no longer offers
+  // other timezones and cannot change how timestamps are displayed.
+  tzSelect.innerHTML = `<option value="${APP_TIMEZONE}" selected>${APP_TIMEZONE}</option>`;
+  tzSelect.disabled = true;
 }
 
 function fmtTime(rawTs){
@@ -569,7 +573,15 @@ function fmtTime(rawTs){
       const num = Number(rawTs);
       date = new Date(num < 1e11 ? num * 1000 : num);
     } else {
-      const isoStr = rawTs.includes(' ') && !rawTs.includes('T') ? rawTs.replace(' ', 'T') : rawTs;
+      let isoStr = rawTs.includes(' ') && !rawTs.includes('T') ? rawTs.replace(' ', 'T') : rawTs;
+      // Persisted timestamps are UTC. If the string carries no explicit
+      // zone/offset marker, treat it as UTC (append 'Z') rather than letting
+      // the JS Date parser assume the browser's local timezone for that
+      // string — every timestamp then converts from the same UTC baseline
+      // before being displayed in Africa/Algiers.
+      if (!/[zZ]|[+-]\d{2}:?\d{2}$/.test(isoStr)) {
+        isoStr += 'Z';
+      }
       date = new Date(isoStr);
     }
   } else {
@@ -589,18 +601,15 @@ function fmtTime(rawTs){
       timeZone: getTimezone()
     }).format(date).replace(',', '');
   } catch(e) {
-    return date.toLocaleString();
+    return '—';
   }
 }
 
 // Signal-box time display: the ACTUAL posted/created time (HH:MM, 24h),
-// always converted to a single fixed timezone (Africa/Algiers) instead of
-// a live elapsed-time counter and instead of the user-selectable app
-// timezone (getTimezone()/TZ_STORAGE_KEY) that the clock/other displays
-// use. This reads the persisted timestamp only, so it survives refresh —
-// it has no dependency on page-load/timer state.
-const SIGNAL_TIME_DISPLAY_TZ = 'Africa/Algiers';
-
+// converted using the same single fixed application timezone as fmtTime()
+// (getTimezone() → APP_TIMEZONE, Africa/Algiers) instead of a live
+// elapsed-time counter. This reads the persisted timestamp only, so it
+// survives refresh — it has no dependency on page-load/timer state.
 function fmtHHMM(rawTs){
   if (!rawTs) return '—';
   let date;
@@ -634,12 +643,10 @@ function fmtHHMM(rawTs){
       hour: '2-digit',
       minute: '2-digit',
       hour12: false,
-      timeZone: SIGNAL_TIME_DISPLAY_TZ
+      timeZone: getTimezone()
     }).format(date);
   } catch(e) {
-    const h = String(date.getHours()).padStart(2, '0');
-    const m = String(date.getMinutes()).padStart(2, '0');
-    return h + ':' + m;
+    return '—';
   }
 }
 
