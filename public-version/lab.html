@@ -1747,7 +1747,7 @@ const SIMILARITY_KEYS = ['trendStrength','volatility','consistency','tradeStabil
 
     <div class="table-scroll">
 
-      <table>
+      <table id="confidenceAnalysisTable">
 
         <thead>
           <tr>
@@ -1797,7 +1797,7 @@ const SIMILARITY_KEYS = ['trendStrength','volatility','consistency','tradeStabil
 
     <div class="table-scroll">
 
-      <table>
+      <table id="symbolIntelligenceMatrixTable">
 
         <thead>
           <tr>
@@ -2439,7 +2439,9 @@ function exportRelease(){
 
 function exportResearch(){
   const payload = buildPageExport('Research', {
-    nextExperiments: scrapeVerdictCards('nextExperimentWrap')
+    nextExperiments: scrapeVerdictCards('nextExperimentWrap'),
+    confidenceAnalysis: scrapeTable('confidenceAnalysisTable'),
+    symbolIntelligenceMatrix: scrapeTable('symbolIntelligenceMatrixTable')
   });
   downloadJSON('research', payload);
 }
