@@ -7,6 +7,17 @@
 // generate-code.js / list-codes.js. The actual enforcement of "hidden
 // symbols don't reach the public dashboard" happens server-side in
 // latest.js, not here — this endpoint only manages the setting.
+//
+// Also carries the "Exit / Signal Display Mode" setting (exit_display_mode:
+// 'sltp' | 'candle' | 'none', default 'sltp') and its companion
+// candle_exit_bars value (default 20). Same read/write pattern as
+// hidden_symbols/show_tp_sl above — this endpoint only manages the setting;
+// enforcement of what the public card shows happens in latest.js/index.html,
+// and enforcement of the actual candle-based trade close must happen in the
+// EA (see EXIT_DISPLAY_MODES note below).
+const EXIT_DISPLAY_MODES = ['sltp', 'candle', 'none'];
+const DEFAULT_EXIT_DISPLAY_MODE = 'sltp';
+const DEFAULT_CANDLE_EXIT_BARS = 20;
 
 import { createClient } from '@supabase/supabase-js';
 
@@ -63,7 +74,7 @@ export default async function handler(req, res) {
 
     const { data: configRow, error: configError } = await supabase
       .from('display_config')
-      .select('hidden_symbols, show_tp_sl')
+      .select('hidden_symbols, show_tp_sl, exit_display_mode, candle_exit_bars')
       .eq('id', 1)
       .maybeSingle();
 
@@ -78,12 +89,14 @@ export default async function handler(req, res) {
     return res.status(200).json({
       all_symbols: combinedSymbols,
       hidden_symbols: configRow?.hidden_symbols || [],
-      show_tp_sl: configRow?.show_tp_sl ?? false
+      show_tp_sl: configRow?.show_tp_sl ?? false,
+      exit_display_mode: configRow?.exit_display_mode || DEFAULT_EXIT_DISPLAY_MODE,
+      candle_exit_bars: configRow?.candle_exit_bars ?? DEFAULT_CANDLE_EXIT_BARS
     });
   }
 
   if (req.method === 'POST') {
-    const { admin_secret, hidden_symbols, show_tp_sl } = req.body;
+    const { admin_secret, hidden_symbols, show_tp_sl, exit_display_mode, candle_exit_bars } = req.body;
 
     if (!admin_secret || admin_secret !== process.env.ADMIN_SECRET) {
       return res.status(401).json({ error: 'unauthorized' });
@@ -91,9 +104,41 @@ export default async function handler(req, res) {
     if (!Array.isArray(hidden_symbols)) {
       return res.status(400).json({ error: 'hidden_symbols must be an array' });
     }
+    if (exit_display_mode !== undefined && !EXIT_DISPLAY_MODES.includes(exit_display_mode)) {
+      return res.status(400).json({ error: 'exit_display_mode must be one of: ' + EXIT_DISPLAY_MODES.join(', ') });
+    }
+    if (candle_exit_bars !== undefined && (!Number.isInteger(candle_exit_bars) || candle_exit_bars <= 0)) {
+      return res.status(400).json({ error: 'candle_exit_bars must be a positive integer' });
+    }
 
-    // upsert both hidden_symbols and show_tp_sl (default to false if not provided)
-    const upsertObj = { id: 1, hidden_symbols, show_tp_sl: !!show_tp_sl };
+    // exit_display_mode/candle_exit_bars are optional on this request so that
+    // a caller that only knows about hidden_symbols/show_tp_sl (e.g. an
+    // older cached admin UI) doesn't silently reset these new settings back
+    // to their defaults every time it saves. When omitted, fall back to
+    // whatever is already stored (or the default, on first-ever save).
+    let existingExitMode = DEFAULT_EXIT_DISPLAY_MODE;
+    let existingCandleBars = DEFAULT_CANDLE_EXIT_BARS;
+    if (exit_display_mode === undefined || candle_exit_bars === undefined) {
+      const { data: existingRow } = await supabase
+        .from('display_config')
+        .select('exit_display_mode, candle_exit_bars')
+        .eq('id', 1)
+        .maybeSingle();
+      if (existingRow?.exit_display_mode) existingExitMode = existingRow.exit_display_mode;
+      if (existingRow?.candle_exit_bars) existingCandleBars = existingRow.candle_exit_bars;
+    }
+
+    const resolvedExitMode = exit_display_mode !== undefined ? exit_display_mode : existingExitMode;
+    const resolvedCandleBars = candle_exit_bars !== undefined ? candle_exit_bars : existingCandleBars;
+
+    // upsert hidden_symbols, show_tp_sl, exit_display_mode and candle_exit_bars
+    const upsertObj = {
+      id: 1,
+      hidden_symbols,
+      show_tp_sl: !!show_tp_sl,
+      exit_display_mode: resolvedExitMode,
+      candle_exit_bars: resolvedCandleBars
+    };
 
     const { error } = await supabase
       .from('display_config')
@@ -104,7 +149,13 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: error.message });
     }
 
-    return res.status(200).json({ ok: true, hidden_symbols, show_tp_sl: !!show_tp_sl });
+    return res.status(200).json({
+      ok: true,
+      hidden_symbols,
+      show_tp_sl: !!show_tp_sl,
+      exit_display_mode: resolvedExitMode,
+      candle_exit_bars: resolvedCandleBars
+    });
   }
 
   return res.status(405).json({ error: 'method_not_allowed' });
