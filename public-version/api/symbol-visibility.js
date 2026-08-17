@@ -19,6 +19,16 @@ const EXIT_DISPLAY_MODES = ['sltp', 'candle', 'none'];
 const DEFAULT_EXIT_DISPLAY_MODE = 'sltp';
 const DEFAULT_CANDLE_EXIT_BARS = 20;
 
+// True if a Supabase/PostgREST error is "column doesn't exist in the schema
+// cache" — i.e. the exit_display_mode/candle_exit_bars migration hasn't
+// been run yet. Distinguishing this from other errors lets GET/POST fail
+// gracefully (keep hidden_symbols/show_tp_sl working) instead of a hard 500.
+function isMissingColumnError(error){
+  if (!error) return false;
+  const msg = String(error.message || '').toLowerCase();
+  return error.code === 'PGRST204' || (msg.includes('column') && msg.includes('could not find'));
+}
+
 import { createClient } from '@supabase/supabase-js';
 
 const SUPPORTED_SYMBOLS = [
@@ -72,9 +82,15 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: symbolsError.message });
     }
 
+    // select('*') instead of naming exit_display_mode/candle_exit_bars
+    // explicitly: PostgREST errors out the ENTIRE query if an explicitly
+    // named column doesn't exist yet (this was the root cause of "Failed to
+    // load symbols" — it was taking hidden_symbols/show_tp_sl down with it).
+    // select('*') just returns whichever columns actually exist, migrated
+    // or not, so hidden_symbols/show_tp_sl always load.
     const { data: configRow, error: configError } = await supabase
       .from('display_config')
-      .select('hidden_symbols, show_tp_sl, exit_display_mode, candle_exit_bars')
+      .select('*')
       .eq('id', 1)
       .maybeSingle();
 
@@ -85,13 +101,17 @@ export default async function handler(req, res) {
 
     const dbSymbols = (symbolRows || []).map(r => r.symbol);
     const combinedSymbols = Array.from(new Set([...SUPPORTED_SYMBOLS, ...dbSymbols])).sort();
+    const exitModeColumnsExist = configRow ? Object.prototype.hasOwnProperty.call(configRow, 'exit_display_mode') : true;
 
     return res.status(200).json({
       all_symbols: combinedSymbols,
       hidden_symbols: configRow?.hidden_symbols || [],
       show_tp_sl: configRow?.show_tp_sl ?? false,
       exit_display_mode: configRow?.exit_display_mode || DEFAULT_EXIT_DISPLAY_MODE,
-      candle_exit_bars: configRow?.candle_exit_bars ?? DEFAULT_CANDLE_EXIT_BARS
+      candle_exit_bars: configRow?.candle_exit_bars ?? DEFAULT_CANDLE_EXIT_BARS,
+      // Lets the admin UI show a "run the migration" hint instead of silently
+      // acting as if Candle Stop is configurable when it isn't yet.
+      exit_display_mode_migrated: exitModeColumnsExist
     });
   }
 
@@ -119,9 +139,10 @@ export default async function handler(req, res) {
     let existingExitMode = DEFAULT_EXIT_DISPLAY_MODE;
     let existingCandleBars = DEFAULT_CANDLE_EXIT_BARS;
     if (exit_display_mode === undefined || candle_exit_bars === undefined) {
+      // select('*') here too — see the GET handler comment above.
       const { data: existingRow } = await supabase
         .from('display_config')
-        .select('exit_display_mode, candle_exit_bars')
+        .select('*')
         .eq('id', 1)
         .maybeSingle();
       if (existingRow?.exit_display_mode) existingExitMode = existingRow.exit_display_mode;
@@ -131,7 +152,11 @@ export default async function handler(req, res) {
     const resolvedExitMode = exit_display_mode !== undefined ? exit_display_mode : existingExitMode;
     const resolvedCandleBars = candle_exit_bars !== undefined ? candle_exit_bars : existingCandleBars;
 
-    // upsert hidden_symbols, show_tp_sl, exit_display_mode and candle_exit_bars
+    // Try the full upsert (including the new columns) first. If the DB
+    // migration hasn't been run yet, this fails with a "column not found"
+    // error — in that case, fall back to upserting ONLY the legacy fields
+    // so hidden_symbols/show_tp_sl keep working exactly as before, rather
+    // than failing the whole save.
     const upsertObj = {
       id: 1,
       hidden_symbols,
@@ -140,9 +165,19 @@ export default async function handler(req, res) {
       candle_exit_bars: resolvedCandleBars
     };
 
-    const { error } = await supabase
+    let { error } = await supabase
       .from('display_config')
       .upsert(upsertObj);
+
+    let migrationPending = false;
+    if (error && isMissingColumnError(error)) {
+      migrationPending = true;
+      console.error('display_config missing exit_display_mode/candle_exit_bars columns — saving hidden_symbols/show_tp_sl only. Run the migration (see README/migration SQL) to enable Candle Stop.');
+      const fallback = await supabase
+        .from('display_config')
+        .upsert({ id: 1, hidden_symbols, show_tp_sl: !!show_tp_sl });
+      error = fallback.error;
+    }
 
     if (error) {
       console.error('Supabase error:', error);
@@ -153,8 +188,10 @@ export default async function handler(req, res) {
       ok: true,
       hidden_symbols,
       show_tp_sl: !!show_tp_sl,
-      exit_display_mode: resolvedExitMode,
-      candle_exit_bars: resolvedCandleBars
+      exit_display_mode: migrationPending ? DEFAULT_EXIT_DISPLAY_MODE : resolvedExitMode,
+      candle_exit_bars: migrationPending ? DEFAULT_CANDLE_EXIT_BARS : resolvedCandleBars,
+      exit_display_mode_migrated: !migrationPending,
+      ...(migrationPending ? { warning: 'exit_display_mode/candle_exit_bars were not saved — the display_config table needs the migration first. hidden_symbols/show_tp_sl saved normally.' } : {})
     });
   }
 
