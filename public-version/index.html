@@ -489,6 +489,8 @@ const TRACKED_SYMBOLS = [
 ];
 
 let showTpSlEnabled = false; // whether the public API is returning TP/SL (server-driven)
+let exitDisplayMode = 'sltp'; // 'sltp' | 'candle' | 'none' — server-driven, defaults to existing behaviour
+let candleExitBars = 20;      // configured candle-exit count, server-driven
 
 let trackedSymbolSet = new Set(TRACKED_SYMBOLS);
 
@@ -675,7 +677,8 @@ const I18N = {
     gateErrorInvalid: 'Invalid code. Please check and try again.',
     gateErrorExpired: 'This code has expired. Please request a new one.',
     gateErrorServer: 'Something went wrong. Please try again.', nearSL: 'Near SL',
-    maintenanceBanner: '🛠 Robot in maintenance'
+    maintenanceBanner: '🛠 Robot in maintenance',
+    candleStopTemplate: 'STOP: {n} candles', candleExitLabel: 'Candle Stop'
   },
   ar: {
     brandName: 'الأخطبوط الصياد',
@@ -700,7 +703,8 @@ const I18N = {
     gateErrorInvalid: 'رمز غير صحيح. يرجى التحقق والمحاولة مرة أخرى.',
     gateErrorExpired: 'انتهت صلاحية هذا الرمز. يرجى طلب رمز جديد.',
     gateErrorServer: 'حدث خطأ ما. يرجى المحاولة مرة أخرى.', nearSL: 'قريب من وقف الخسارة',
-    maintenanceBanner: '🛠 الروبوت تحت الصيانة'
+    maintenanceBanner: '🛠 الروبوت تحت الصيانة',
+    candleStopTemplate: 'الوقف: {n} شمعة', candleExitLabel: 'وقف الشموع'
   }
 };
 
@@ -1007,13 +1011,24 @@ function renderGrid(data){
     const colorHex = s.direction === 'up' ? '#35c77e' : '#e5484d';
     const nearSL = !isClosed && (s.sl_proximity || 0) >= 70;
 
-    // Compact TP/SL block. Render only when server includes TP/SL fields (showTpSlEnabled).
-    const tpSlHtml = showTpSlEnabled && (s.entry_price !== undefined || s.sl_price !== undefined || s.tp_price !== undefined) ? `
+    // Exit/display info block. Exactly one of three modes, server-driven via exitDisplayMode:
+    //  - 'sltp'   (existing behaviour, unchanged): compact ENTRY/SL/TP price block.
+    //  - 'candle' : hides prices, shows the configured candle-exit count instead.
+    //  - 'none'   : hides both.
+    let tpSlHtml = '';
+    if(exitDisplayMode === 'sltp'){
+      tpSlHtml = showTpSlEnabled && (s.entry_price !== undefined || s.sl_price !== undefined || s.tp_price !== undefined) ? `
       <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; margin:6px 0; color:var(--muted);" class="ltr">
         <div style="display:flex; justify-content:space-between;"><span>ENTRY</span><span>${fmtPrice(s.entry_price)}</span></div>
         <div style="display:flex; justify-content:space-between;"><span>SL</span><span>${fmtPrice(s.sl_price)}</span></div>
         <div style="display:flex; justify-content:space-between;"><span>TP</span><span>${fmtPrice(s.tp_price)}</span></div>
       </div>` : '';
+    } else if(exitDisplayMode === 'candle'){
+      tpSlHtml = `
+      <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; margin:6px 0; color:var(--muted); text-align:center;" class="ltr">
+        ${t('candleStopTemplate').replace('{n}', candleExitBars)}
+      </div>`;
+    }
 
     return `
     <div class="card ${isClosed ? 'closed' : ''} ${nearSL ? 'urgent' : ''}" style="cursor:default;">
@@ -1079,7 +1094,7 @@ function openDetail(i){
 
     ${countdownHtml}
 
-    ${ showTpSlEnabled && (s.entry_price !== undefined || s.sl_price !== undefined || s.tp_price !== undefined) ? `
+    ${ exitDisplayMode === 'sltp' && showTpSlEnabled && (s.entry_price !== undefined || s.sl_price !== undefined || s.tp_price !== undefined) ? `
     <div class="levels">
       <div class="level-box entry">
         <div class="l-label">${t('entry')}</div>
@@ -1092,6 +1107,13 @@ function openDetail(i){
       <div class="level-box tp">
         <div class="l-label">${t('takeProfit')}</div>
         <div class="l-value ltr">${fmtPrice(s.tp_price)}</div>
+      </div>
+    </div>` : '' }
+    ${ exitDisplayMode === 'candle' ? `
+    <div class="levels">
+      <div class="level-box entry">
+        <div class="l-label">${t('candleExitLabel')}</div>
+        <div class="l-value ltr">${candleExitBars}</div>
       </div>
     </div>` : '' }
 
@@ -1152,10 +1174,16 @@ async function poll(){
     // Determine whether server included TP/SL fields (server drives visibility)
     if (Array.isArray(data)) {
       showTpSlEnabled = data.some(r => Object.prototype.hasOwnProperty.call(r, 'entry_price'));
+      exitDisplayMode = 'sltp'; // legacy bare-array shape carries no mode info — default preserves existing behaviour
+      candleExitBars = 20;
     } else if (data && Array.isArray(data.signals)) {
       showTpSlEnabled = data.signals.some(r => Object.prototype.hasOwnProperty.call(r, 'entry_price'));
+      exitDisplayMode = data.exit_display_mode || 'sltp';
+      candleExitBars = data.candle_exit_bars || 20;
     } else {
       showTpSlEnabled = false;
+      exitDisplayMode = 'sltp';
+      candleExitBars = 20;
     }
 
     checkForNewSignals(data);
