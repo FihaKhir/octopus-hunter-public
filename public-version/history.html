@@ -110,8 +110,29 @@
         <button class="secondary time-range-btn" data-hours="4" data-i18n="time4h" onclick="setTimeRange(4, this)">Last 4h</button>
         <button class="secondary time-range-btn" data-hours="12" data-i18n="time12h" onclick="setTimeRange(12, this)">Last 12h</button>
         <button class="secondary time-range-btn" data-hours="24" data-i18n="time24h" onclick="setTimeRange(24, this)">Last 24h</button>
+        <button class="secondary time-range-btn" data-hours="custom" data-i18n="timeCustom" onclick="setTimeRange('custom', this)">Custom</button>
       </div>
       <button class="secondary" onclick="exportCSV()" id="exportCsvBtn" data-i18n="exportCsvBtn">📊 Export CSV</button>
+    </div>
+    <div id="customRangePanel" style="display:none; margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">
+      <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:flex-end;">
+        <div>
+          <label data-i18n="customFromLabel">From</label>
+          <div style="display:flex; gap:6px;">
+            <input type="date" id="customFromDate">
+            <input type="time" id="customFromTime">
+          </div>
+        </div>
+        <div>
+          <label data-i18n="customToLabel">To</label>
+          <div style="display:flex; gap:6px;">
+            <input type="date" id="customToDate">
+            <input type="time" id="customToTime">
+          </div>
+        </div>
+        <button onclick="applyCustomRange()" id="customApplyBtn" data-i18n="customApplyBtn">Apply</button>
+      </div>
+      <div class="error" id="customRangeError" style="display:none; margin-top:8px;"></div>
     </div>
   </div>
 
@@ -193,6 +214,7 @@ let allRows = [];
 let timeRangeHours = null; // null = all time
 let queryWindowFrom = null; // unix seconds — set when a time-range button is active
 let queryWindowTo = null;   // unix seconds — set when a time-range button is active
+let customRangeActive = false; // true when the Custom range has been applied
 
 // --- Timezone Management ------------------------------------------------
 // The application uses ONE FIXED display timezone everywhere: Africa/Algiers.
@@ -242,6 +264,33 @@ function getTimezone(){
   return APP_TIMEZONE;
 }
 
+// Africa/Algiers has used a fixed UTC+1 offset year-round (no DST) since
+// 1981, matching the fixed APP_TIMEZONE used for display everywhere else.
+const ALGIERS_OFFSET_SECONDS = 3600;
+
+// Converts a <input type="date"> + <input type="time"> pair, understood as
+// wall-clock values in APP_TIMEZONE, into unix seconds — independent of
+// whatever timezone the visitor's browser/OS happens to be set to.
+function algiersInputToUnix(dateVal, timeVal){
+  if(!dateVal || !timeVal) return null;
+  const [y, m, d] = dateVal.split('-').map(Number);
+  const [hh, mm] = timeVal.split(':').map(Number);
+  if(!y || !m || !d || isNaN(hh) || isNaN(mm)) return null;
+  return Math.floor((Date.UTC(y, m - 1, d, hh, mm, 0) - ALGIERS_OFFSET_SECONDS * 1000) / 1000);
+}
+
+// Current date/time as wall-clock values in APP_TIMEZONE, formatted for
+// direct use as <input type="date">/<input type="time"> values.
+function algiersNowParts(){
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: APP_TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false
+  });
+  const parts = fmt.formatToParts(new Date());
+  const get = type => parts.find(p => p.type === type)?.value;
+  return { date: `${get('year')}-${get('month')}-${get('day')}`, time: `${get('hour')}:${get('minute')}` };
+}
+
 function setTimezone(tz){
   // The display timezone is fixed (Africa/Algiers) and cannot be changed by
   // the user. This is now a no-op, kept only because the (disabled)
@@ -274,6 +323,10 @@ const I18N = {
     refreshBtn: 'Refresh',
     timeRangeHeading: 'Time range',
     timeAll: 'All time', time1h: 'Last 1h', time4h: 'Last 4h', time12h: 'Last 12h', time24h: 'Last 24h',
+    timeCustom: 'Custom',
+    customFromLabel: 'From', customToLabel: 'To', customApplyBtn: 'Apply',
+    customRangeInvalid: '"From" must be before or equal to "To".',
+    customRangeIncomplete: 'Please select both a date and a time for From and To.',
     exportCsvBtn: '📊 Export CSV',
     versionCompareHeading: 'Strategy version comparison (respects Family/Symbol/Outcome/Time filters, ignores the Strategy version dropdown itself)',
     colVersion: 'Version', colTotal: 'Total', colWins: 'Wins', colLosses: 'Losses',
@@ -309,6 +362,10 @@ const I18N = {
     refreshBtn: 'تحديث',
     timeRangeHeading: 'النطاق الزمني',
     timeAll: 'كل الوقت', time1h: 'آخر ساعة', time4h: 'آخر 4 ساعات', time12h: 'آخر 12 ساعة', time24h: 'آخر 24 ساعة',
+    timeCustom: 'مخصص',
+    customFromLabel: 'من', customToLabel: 'إلى', customApplyBtn: 'تطبيق',
+    customRangeInvalid: 'يجب أن يكون وقت "من" قبل أو يساوي وقت "إلى".',
+    customRangeIncomplete: 'الرجاء اختيار التاريخ والوقت لكل من "من" و"إلى".',
     exportCsvBtn: '📊 تصدير CSV',
     versionCompareHeading: 'مقارنة إصدارات الاستراتيجية (تراعي فلاتر العائلة/الرمز/النتيجة/الوقت، وتتجاهل قائمة إصدار الاستراتيجية نفسها)',
     colVersion: 'الإصدار', colTotal: 'الإجمالي', colWins: 'الأرباح', colLosses: 'الخسائر',
@@ -420,7 +477,10 @@ function fmtPercent(v){
 async function loadHistory(){
   try{
     let url = '/api/history?admin_secret=' + encodeURIComponent(adminSecret);
-    if(timeRangeHours){
+    if(customRangeActive && queryWindowFrom !== null){
+      // queryWindowFrom/queryWindowTo were already set by applyCustomRange().
+      url += '&since=' + queryWindowFrom;
+    } else if(timeRangeHours){
       const nowSeconds = Math.floor(Date.now() / 1000);
       queryWindowTo = nowSeconds;
       queryWindowFrom = nowSeconds - (timeRangeHours * 3600);
@@ -461,16 +521,73 @@ function showTruncationWarning(truncated){
 }
 
 function setTimeRange(hours, btnEl){
-  timeRangeHours = hours;
   document.querySelectorAll('.time-range-btn').forEach(b => b.classList.remove('active'));
   btnEl.classList.add('active');
+
+  if(hours === 'custom'){
+    showCustomRangePanel();
+    return; // filtering happens once the user presses Apply
+  }
+
+  customRangeActive = false;
+  hideCustomRangePanel();
+  timeRangeHours = hours;
+  loadHistory();
+}
+
+function showCustomRangePanel(){
+  const panel = document.getElementById('customRangePanel');
+  if(panel) panel.style.display = 'block';
+  const errEl = document.getElementById('customRangeError');
+  if(errEl) errEl.style.display = 'none';
+  // "To" always defaults to the current time when the Custom panel is opened.
+  const now = algiersNowParts();
+  const toDateEl = document.getElementById('customToDate');
+  const toTimeEl = document.getElementById('customToTime');
+  if(toDateEl) toDateEl.value = now.date;
+  if(toTimeEl) toTimeEl.value = now.time;
+}
+
+function hideCustomRangePanel(){
+  const panel = document.getElementById('customRangePanel');
+  if(panel) panel.style.display = 'none';
+}
+
+function applyCustomRange(){
+  const fromDate = document.getElementById('customFromDate').value;
+  const fromTime = document.getElementById('customFromTime').value;
+  const toDate = document.getElementById('customToDate').value;
+  const toTime = document.getElementById('customToTime').value;
+  const errEl = document.getElementById('customRangeError');
+
+  const fromUnix = algiersInputToUnix(fromDate, fromTime);
+  const toUnix = algiersInputToUnix(toDate, toTime);
+
+  if(fromUnix === null || toUnix === null){
+    errEl.textContent = t('customRangeIncomplete');
+    errEl.style.display = 'block';
+    return;
+  }
+  if(fromUnix > toUnix){
+    errEl.textContent = t('customRangeInvalid');
+    errEl.style.display = 'block';
+    return;
+  }
+  errEl.style.display = 'none';
+
+  timeRangeHours = null;
+  customRangeActive = true;
+  queryWindowFrom = fromUnix;
+  queryWindowTo = toUnix;
   loadHistory();
 }
 
 function withinTimeRange(row){
   if(queryWindowFrom === null) return true;
   if(!row.opened_at) return false;
-  return row.opened_at >= queryWindowFrom;
+  if(row.opened_at < queryWindowFrom) return false;
+  if(queryWindowTo !== null && row.opened_at > queryWindowTo) return false;
+  return true;
 }
 
 function filteredRows(){
