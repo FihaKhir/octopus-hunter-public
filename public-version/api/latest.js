@@ -62,9 +62,14 @@ export default async function handler(req, res) {
   let exitDisplayMode = 'sltp'; // default: unchanged existing behaviour
   let candleExitBars = 20;
   try {
+    // select('*') instead of naming exit_display_mode/candle_exit_bars
+    // explicitly — an explicitly-named missing column fails PostgREST's
+    // ENTIRE query, which would have also wiped out hidden_symbols/
+    // show_tp_sl (and therefore shown ALL symbols publicly, hidden ones
+    // included) whenever the migration hasn't been run yet.
     const { data: configRow, error: configError } = await supabase
   .from('display_config')
-  .select('hidden_symbols, show_tp_sl, exit_display_mode, candle_exit_bars')
+  .select('*')
   .eq('id', 1)
   .maybeSingle();
 
