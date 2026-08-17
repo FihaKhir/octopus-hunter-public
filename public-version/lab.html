@@ -219,7 +219,28 @@
           <button class="secondary time-range-btn" data-hours="4" onclick="setTimeRange(4, this)">Last 4h</button>
           <button class="secondary time-range-btn" data-hours="12" onclick="setTimeRange(12, this)">Last 12h</button>
           <button class="secondary time-range-btn" data-hours="24" onclick="setTimeRange(24, this)">Last 24h</button>
+          <button class="secondary time-range-btn" data-hours="custom" onclick="setTimeRange('custom', this)">Custom</button>
         </div>
+      </div>
+      <div id="customRangePanel" style="display:none; margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">
+        <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:flex-end;">
+          <div>
+            <label style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em; display:block; margin-bottom:6px;">From</label>
+            <div style="display:flex; gap:6px;">
+              <input type="date" id="customFromDate" style="background:#0e1119; border:1px solid var(--border); color:var(--text); font-family:'IBM Plex Mono',monospace; font-size:13px; padding:8px 10px; border-radius:6px;">
+              <input type="time" id="customFromTime" style="background:#0e1119; border:1px solid var(--border); color:var(--text); font-family:'IBM Plex Mono',monospace; font-size:13px; padding:8px 10px; border-radius:6px;">
+            </div>
+          </div>
+          <div>
+            <label style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em; display:block; margin-bottom:6px;">To</label>
+            <div style="display:flex; gap:6px;">
+              <input type="date" id="customToDate" style="background:#0e1119; border:1px solid var(--border); color:var(--text); font-family:'IBM Plex Mono',monospace; font-size:13px; padding:8px 10px; border-radius:6px;">
+              <input type="time" id="customToTime" style="background:#0e1119; border:1px solid var(--border); color:var(--text); font-family:'IBM Plex Mono',monospace; font-size:13px; padding:8px 10px; border-radius:6px;">
+            </div>
+          </div>
+          <button class="quick-btn" onclick="applyCustomRange()">Apply</button>
+        </div>
+        <div class="error" id="customRangeError" style="display:none; margin-top:8px; color:var(--down); font-size:13px;"></div>
       </div>
     </div>
     <!-- Global time-range control END -->
@@ -513,22 +534,30 @@ let allSymbolProfiles = [];
 let allRowsRaw = [];
 let timeRangeHours = null; // null = all time
 let queryWindowFrom = null; // unix seconds — set when a time-range button is active
+let queryWindowTo = null;   // unix seconds — set when Custom range is applied
+let customRangeActive = false; // true once the Custom range has been applied
 
 function withinTimeRange(row){
   if(queryWindowFrom === null) return true;
   if(!row.opened_at) return false;
-  return row.opened_at >= queryWindowFrom;
+  if(row.opened_at < queryWindowFrom) return false;
+  if(queryWindowTo !== null && row.opened_at > queryWindowTo) return false;
+  return true;
 }
 
 /* Derives the filtered `allRows` view from `allRowsRaw` and
    recomputes/re-renders every downstream tab. Does not re-fetch
    from the server and does not touch allRowsRaw. */
 function applyTimeRangeFilter(){
-  if(timeRangeHours){
+  if(customRangeActive){
+    // queryWindowFrom/queryWindowTo were already set by applyCustomRange().
+  } else if(timeRangeHours){
     const nowSeconds = Math.floor(Date.now() / 1000);
     queryWindowFrom = nowSeconds - (timeRangeHours * 3600);
+    queryWindowTo = null;
   } else {
     queryWindowFrom = null;
+    queryWindowTo = null;
   }
   allRows = allRowsRaw.filter(withinTimeRange);
 
@@ -541,9 +570,91 @@ function applyTimeRangeFilter(){
 }
 
 function setTimeRange(hours, btnEl){
-  timeRangeHours = hours;
   document.querySelectorAll('.time-range-btn').forEach(b => b.classList.remove('active'));
   btnEl.classList.add('active');
+
+  if(hours === 'custom'){
+    showCustomRangePanel();
+    return; // filtering happens once the user presses Apply
+  }
+
+  customRangeActive = false;
+  hideCustomRangePanel();
+  timeRangeHours = hours;
+  applyTimeRangeFilter();
+}
+
+// Africa/Algiers has used a fixed UTC+1 offset year-round (no DST) since
+// 1981 — the same fixed timezone the History page uses for display.
+const ALGIERS_OFFSET_SECONDS = 3600;
+
+// Converts a <input type="date"> + <input type="time"> pair, understood as
+// wall-clock values in Africa/Algiers, into unix seconds — independent of
+// whatever timezone the visitor's browser/OS happens to be set to.
+function algiersInputToUnix(dateVal, timeVal){
+  if(!dateVal || !timeVal) return null;
+  const [y, m, d] = dateVal.split('-').map(Number);
+  const [hh, mm] = timeVal.split(':').map(Number);
+  if(!y || !m || !d || isNaN(hh) || isNaN(mm)) return null;
+  return Math.floor((Date.UTC(y, m - 1, d, hh, mm, 0) - ALGIERS_OFFSET_SECONDS * 1000) / 1000);
+}
+
+// Current date/time as wall-clock values in Africa/Algiers, formatted for
+// direct use as <input type="date">/<input type="time"> values.
+function algiersNowParts(){
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Africa/Algiers', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false
+  });
+  const parts = fmt.formatToParts(new Date());
+  const get = type => parts.find(p => p.type === type)?.value;
+  return { date: `${get('year')}-${get('month')}-${get('day')}`, time: `${get('hour')}:${get('minute')}` };
+}
+
+function showCustomRangePanel(){
+  const panel = document.getElementById('customRangePanel');
+  if(panel) panel.style.display = 'block';
+  const errEl = document.getElementById('customRangeError');
+  if(errEl) errEl.style.display = 'none';
+  // "To" always defaults to the current time when the Custom panel is opened.
+  const now = algiersNowParts();
+  const toDateEl = document.getElementById('customToDate');
+  const toTimeEl = document.getElementById('customToTime');
+  if(toDateEl) toDateEl.value = now.date;
+  if(toTimeEl) toTimeEl.value = now.time;
+}
+
+function hideCustomRangePanel(){
+  const panel = document.getElementById('customRangePanel');
+  if(panel) panel.style.display = 'none';
+}
+
+function applyCustomRange(){
+  const fromDate = document.getElementById('customFromDate').value;
+  const fromTime = document.getElementById('customFromTime').value;
+  const toDate = document.getElementById('customToDate').value;
+  const toTime = document.getElementById('customToTime').value;
+  const errEl = document.getElementById('customRangeError');
+
+  const fromUnix = algiersInputToUnix(fromDate, fromTime);
+  const toUnix = algiersInputToUnix(toDate, toTime);
+
+  if(fromUnix === null || toUnix === null){
+    errEl.textContent = 'Please select both a date and a time for From and To.';
+    errEl.style.display = 'block';
+    return;
+  }
+  if(fromUnix > toUnix){
+    errEl.textContent = '"From" must be before or equal to "To".';
+    errEl.style.display = 'block';
+    return;
+  }
+  errEl.style.display = 'none';
+
+  timeRangeHours = null;
+  customRangeActive = true;
+  queryWindowFrom = fromUnix;
+  queryWindowTo = toUnix;
   applyTimeRangeFilter();
 }
 
