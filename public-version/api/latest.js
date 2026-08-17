@@ -59,10 +59,12 @@ export default async function handler(req, res) {
   // Read display_config
   let hiddenSymbols = [];
   let showTpSl = false; // default to hidden
+  let exitDisplayMode = 'sltp'; // default: unchanged existing behaviour
+  let candleExitBars = 20;
   try {
     const { data: configRow, error: configError } = await supabase
   .from('display_config')
-  .select('hidden_symbols, show_tp_sl')
+  .select('hidden_symbols, show_tp_sl, exit_display_mode, candle_exit_bars')
   .eq('id', 1)
   .maybeSingle();
 
@@ -77,10 +79,19 @@ export default async function handler(req, res) {
         hiddenSymbols = [];
       }
       showTpSl = !!configRow?.show_tp_sl;
+      exitDisplayMode = configRow?.exit_display_mode || 'sltp';
+      candleExitBars = configRow?.candle_exit_bars ?? 20;
     }
   } catch (err) {
     console.error('display_config read failed (treating as no config):', err);
   }
+
+  // SL/TP price fields are only ever exposed when the admin's Exit / Signal
+  // Display Mode is explicitly "SL/TP" (the default) AND the legacy
+  // show_tp_sl toggle is on — this preserves existing behaviour exactly
+  // when exit_display_mode is left at its default, while the "Candle Exit"
+  // and "None" modes hide prices regardless of show_tp_sl.
+  const includePriceFields = showTpSl && exitDisplayMode === 'sltp';
 
   // Diagnostic logging requested (non-sensitive)
   try {
@@ -126,7 +137,7 @@ export default async function handler(req, res) {
       family: row.family,
       sl_proximity: row.sl_proximity
     };
-    if (showTpSl) {
+    if (includePriceFields) {
       base.entry_price = row.entry_price;
       base.sl_price = row.sl_price;
       base.tp_price = row.tp_price;
@@ -134,5 +145,14 @@ export default async function handler(req, res) {
     return base;
   });
 
-  return res.status(200).json(publicData);
+  // Response shape stays compatible with the existing dashboard, which
+  // already accepts either a bare array or { signals: [...] } (see
+  // index.html's poll()/renderGrid() — both branch on Array.isArray(data)).
+  // Wrapping lets us carry the global exit_display_mode/candle_exit_bars
+  // settings alongside the per-signal rows without adding a new endpoint.
+  return res.status(200).json({
+    signals: publicData,
+    exit_display_mode: exitDisplayMode,
+    candle_exit_bars: candleExitBars
+  });
 }
